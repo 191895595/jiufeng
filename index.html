@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>九峰牧场 · 数据看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js">
+</script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+</script><style>
+:root {
+  --bg: #f5f5f7; --card: #fff; --text: #1d1d1f; --text2: #6e6e73;
+  --text3: #aeaeb2; --accent: #0071e3; --accent-light: #e8f0fe;
+  --border: #e5e5ea; --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow: 0 4px 16px rgba(0,0,0,0.06); --r: 16px; --t: 0.2s ease;
+  --green: #34c759; --orange: #ff9500; --red: #ff3b30; --purple: #af52de;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif;background:var(--bg);color:var(--text);line-height:1.47;-webkit-font-smoothing:antialiased}
+.header{background:rgba(255,255,255,0.72);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;padding:0 32px}
+.header-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+.header-left{display:flex;align-items:center;gap:16px}
+.logo{font-size:21px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.logo span{color:var(--accent)}
+.badge{font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-light);padding:3px 10px;border-radius:20px}
+.header-right{display:flex;align-items:center;gap:14px}
+.upload-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--accent);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;transition:var(--t);font-family:inherit}
+.upload-btn:hover{background:#0077ed;transform:scale(1.02)}
+.upload-btn:active{transform:scale(.98)}
+.download-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--green);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;transition:var(--t);font-family:inherit}
+.download-btn:hover{background:#30b350;transform:scale(1.02)}
+.download-btn:active{transform:scale(.98)}
+.download-btn:disabled{background:#d1d1d6;color:#fff;cursor:not-allowed;transform:none}
+.download-btn:disabled:hover{background:#d1d1d6;transform:none}
+.refresh-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--purple);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;transition:var(--t);font-family:inherit}
+.refresh-btn:hover{background:#9b30d6;transform:scale(1.02)}
+.refresh-btn:active{transform:scale(.98)}
+.refresh-btn.loading{animation:spin 1s linear infinite;pointer-events:none;opacity:.7}
+
+
+
+
+.last-update{font-size:13px;color:var(--text2)}
+#fileInput{display:none}
+.container{max-width:1440px;margin:0 auto;padding:32px}
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.filter-label{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+.filter-pill{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:var(--t);white-space:nowrap;font-family:inherit}
+.filter-pill:hover{border-color:var(--accent);color:var(--accent)}
+.filter-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.filter-divider{width:1px;height:22px;background:var(--border);margin:0 4px}
+.custom-range{display:none;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 14px;background:var(--accent-light);border-radius:12px;margin-bottom:12px}
+.custom-range.show{display:flex}
+.custom-range .cr-label{font-size:12px;font-weight:600;color:var(--accent);margin-right:4px}
+.custom-range input[type=date],.custom-range input[type=week],.custom-range input[type=month]{padding:6px 10px;border-radius:8px;font-size:13px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer}
+.custom-range input[type=date]:focus,.custom-range input[type=week]:focus,.custom-range input[type=month]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.12)}
+.custom-range .cr-sep{font-size:12px;color:var(--text2);font-weight:500}
+.custom-range .cr-clear{padding:4px 10px;border-radius:14px;font-size:12px;font-weight:500;background:#fff;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;margin-left:auto}
+.custom-range .cr-clear:hover{background:var(--red);color:#fff;border-color:var(--red)}
+select.date-input{padding:6px 12px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e73'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+select.date-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.12)}
+.channel-filter-row{display:flex;align-items:center;gap:8px;margin-bottom:28px;flex-wrap:wrap}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:28px}
+.kpi-card{background:var(--card);border-radius:var(--r);padding:24px;box-shadow:var(--shadow-sm);transition:var(--t);cursor:default}
+.kpi-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+.kpi-label{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.kpi-value{font-size:32px;font-weight:700;letter-spacing:-.02em;color:var(--text);line-height:1.1}
+.kpi-sub{font-size:13px;color:var(--text2);margin-top:6px;display:flex;align-items:center;gap:4px}
+.chart-grid{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:28px}
+.chart-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px}
+.card{background:var(--card);border-radius:var(--r);padding:24px;box-shadow:var(--shadow-sm)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.card-title{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.card-subtitle{font-size:13px;color:var(--text2)}
+.chart-wrap{position:relative;width:100%}
+.chart-wrap canvas{width:100%!important}
+.granularity-bar{display:flex;gap:4px;background:#f0f0f2;border-radius:8px;padding:3px}
+.gran-btn{padding:5px 14px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:var(--t);font-family:inherit}
+.gran-btn.active{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+/* Comparison section */
+.compare-section{margin-bottom:28px}
+.compare-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.compare-header .card-title{margin-bottom:0}
+.compare-select{font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;padding:6px 12px;font-family:inherit;cursor:pointer}
+.compare-select:focus{outline:none;border-color:var(--accent)}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+.compare-card{background:var(--card);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-sm);border:2px solid transparent;transition:var(--t)}
+.compare-card.a{border-color:#0071e3}
+.compare-card.b{border-color:#ff9500}
+.compare-card .card-header{margin-bottom:12px}
+.compare-label{font-size:13px;font-weight:600;margin-bottom:4px}
+.compare-label.a{color:#0071e3}
+.compare-label.b{color:#ff9500}
+.compare-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.compare-kpi .lbl{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+.compare-kpi .val{font-size:20px;font-weight:700;margin-top:2px}
+.diff-bar{margin-bottom:18px}
+.diff-card{background:var(--card);border-radius:var(--r);padding:20px;box-shadow:var(--shadow-sm);text-align:center}
+.diff-label{font-size:13px;color:var(--text2);margin-bottom:6px}
+.diff-value{font-size:28px;font-weight:700}
+.diff-value.up{color:var(--green)}
+.diff-value.down{color:var(--red)}
+.compare-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+/* Tables */
+.table-card{background:var(--card);border-radius:var(--r);padding:24px;box-shadow:var(--shadow-sm);margin-bottom:28px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{text-align:left;padding:10px 14px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:12px 14px;border-bottom:1px solid #f0f0f2;vertical-align:middle}
+tbody tr:hover{background:#fafafa}
+tbody tr:last-child td{border-bottom:none}
+.text-right{text-align:right}
+.sales-num{font-weight:600;font-variant-numeric:tabular-nums}
+.rank-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:700;color:var(--text2);background:#f5f5f7}
+.rank-badge.top1{background:#ffd60a;color:#1d1d1f}
+.rank-badge.top2{background:#e5e5ea;color:#1d1d1f}
+.rank-badge.top3{background:#f5c282;color:#1d1d1f}
+.channel-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:500;white-space:nowrap}
+.channel-tag.c0{background:#e8f0fe;color:#0071e3}
+.channel-tag.c1{background:#e6f9ed;color:#248a3d}
+.channel-tag.c2{background:#fff2e5;color:#c75000}
+.channel-tag.c3{background:#f2e6ff;color:#7c3aed}
+.channel-tag.c4{background:#ffe5ea;color:#d6336c}
+.progress-bar{height:6px;background:#f0f0f2;border-radius:3px;overflow:hidden;margin-top:4px;min-width:60px}
+.progress-fill{height:100%;border-radius:3px;transition:width .3s ease;background:var(--accent)}
+.loading-overlay{position:fixed;inset:0;background:rgba(245,245,247,0.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity .3s}
+.loading-overlay.show{opacity:1;pointer-events:auto}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.drop-zone{position:fixed;inset:0;background:rgba(0,113,227,0.06);border:3px dashed var(--accent);z-index:300;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.drop-zone.show{opacity:1}
+.drop-zone-text{font-size:24px;font-weight:600;color:var(--accent)}
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#1d1d1f;color:#fff;padding:12px 24px;border-radius:20px;font-size:14px;font-weight:500;z-index:400;opacity:0;pointer-events:none;transition:opacity .3s}
+.toast.show{opacity:1}
+@media(max-width:1024px){
+.kpi-grid{grid-template-columns:repeat(2,1fr)}
+.chart-grid,.chart-grid-2,.compare-grid,.compare-chart-row{grid-template-columns:1fr}
+.container{padding:20px}.header{padding:0 16px}
+}
+@media(max-width:768px){
+/* Header: wrap on small screens */
+.header-inner{flex-wrap:wrap;height:auto;padding:8px 0;gap:8px}
+.header-right{flex-wrap:wrap;width:100%;justify-content:space-between;padding:4px 0}
+.last-update{font-size:11px;order:-1;width:100%;text-align:center}
+.upload-btn,
+.upload-btn svg,.upload-btn svg{width:14px;height:14px}
+/* Filter bar: scrollable pills */
+.filter-bar{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px}
+.filter-bar::-webkit-scrollbar{display:none}
+.filter-pill{padding:5px 10px;font-size:12px;flex-shrink:0}
+.filter-divider{display:none}
+.channel-filter-row{gap:6px;margin-bottom:16px}
+select.date-input{font-size:12px;padding:5px 28px 5px 10px}
+/* Charts: reduce height */
+.chart-wrap[style*="340px"]{height:260px!important}
+.chart-wrap[style*="320px"]{height:240px!important}
+/* Card padding */
+.card{padding:16px}
+/* Compare header */
+.compare-header select{font-size:13px}
+/* Table */
+table{font-size:13px}
+th,td{padding:8px 10px}
+}
+@media(max-width:480px){
+.logo{font-size:17px}
+.badge{font-size:10px;padding:2px 8px}
+.kpi-value{font-size:24px}
+.kpi-label{font-size:12px}
+.card-title{font-size:15px}
+.card-subtitle{font-size:12px}
+.chart-wrap[style*="340px"]{height:220px!important}
+.chart-wrap[style*="320px"]{height:200px!important}
+.upload-btn span{display:none}
+.upload-btn,
+.filter-pill{padding:4px 8px;font-size:11px}
+select.date-input{font-size:11px;padding:4px 24px 4px 8px}
+th,td{padding:6px 8px;font-size:12px}
+}
+/* Daily detail expand */
+.daily-toggle{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:11px;cursor:pointer;transition:var(--t);font-family:inherit;line-height:1}
+.daily-toggle:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.daily-toggle.open{background:var(--accent);color:#fff;border-color:var(--accent)}
+.daily-detail-row td{padding:0;border-bottom:1px solid var(--border)}
+.daily-detail-row.show{display:table-row!important}
+.daily-mini-wrap{background:#f9f9fb;padding:10px 16px;max-height:240px;overflow-y:auto;border-left:3px solid var(--accent);margin:4px 0}
+.daily-mini-table{width:100%;font-size:12px;border-collapse:collapse}
+.daily-mini-table thead th{font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;border-bottom:1px solid var(--border);background:transparent;position:sticky;top:0;background:#f9f9fb}
+.daily-mini-table tbody td{padding:4px 10px;border-bottom:1px solid #eee;font-size:12px}
+.daily-mini-table tbody tr:hover{background:#f0f0f5}
+.daily-mini-table .sales-num{font-weight:600;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="header">
+<div class="header-inner">
+<div class="header-left"><div class="logo">九峰牧场<span>·</span>数据看板</div><div class="badge">BETA</div></div>
+<div class="header-right">
+<span class="last-update" id="lastUpdate">📂 数据来源：用户上传 xlsx | 请点击右侧「上传表格手动更新」选择文件</span>
+<button class="refresh-btn" onclick="refreshFromFeishu()" id="refreshBtn" title="从飞书在线表格刷新最新数据">
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+刷新数据</button>
+<button class="upload-btn" onclick="triggerUpload()" id="syncBtn" title="上传 xlsx 表格手动更新数据">
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+上传表格手动更新</button>
+<button class="download-btn" onclick="downloadReport()" id="downloadBtn" title="生成内嵌最新数据的正式报告并下载" disabled>
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+下载报告</button>
+
+<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(this)">
+</div></div></div>
+<div class="drop-zone" id="dropZone"><div class="drop-zone-text">释放文件以更新数据</div></div>
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<div class="container">
+<!-- Time filters -->
+<div class="filter-bar">
+<span class="filter-label">时间</span>
+<button class="filter-pill active" data-filter="all" onclick="setTimeFilter('all',this)">全部</button>
+<div class="filter-divider"></div>
+<button class="filter-pill" data-filter="today" onclick="setTimeFilter('today',this)">今天</button>
+<button class="filter-pill" data-filter="yesterday" onclick="setTimeFilter('yesterday',this)">昨天</button>
+<button class="filter-pill" data-filter="daybefore" onclick="setTimeFilter('daybefore',this)">前天</button>
+<div class="filter-divider"></div>
+<button class="filter-pill" data-filter="thisweek" onclick="setTimeFilter('thisweek',this)">本周</button>
+<button class="filter-pill" data-filter="lastweek" onclick="setTimeFilter('lastweek',this)">上周</button>
+<div class="filter-divider"></div>
+<button class="filter-pill" data-filter="thismonth" onclick="setTimeFilter('thismonth',this)">本月</button>
+<button class="filter-pill" data-filter="lastmonth" onclick="setTimeFilter('lastmonth',this)">上月</button>
+<div class="filter-divider"></div>
+<button class="filter-pill" data-filter="custom_day" onclick="setTimeFilter('custom_day',this)">自定义日</button>
+<button class="filter-pill" data-filter="custom_range" onclick="setTimeFilter('custom_range',this)">自定义范围</button>
+<button class="filter-pill" data-filter="custom_week" onclick="setTimeFilter('custom_week',this)">自定义周</button>
+<button class="filter-pill" data-filter="custom_month" onclick="setTimeFilter('custom_month',this)">自定义月</button>
+</div>
+
+<!-- Custom range pickers (toggle based on filter) -->
+<div class="custom-range" id="customRange">
+<span class="cr-label">🔍 自定义范围</span>
+<input type="date" id="crFrom" onchange="onCustomRangeChange()">
+<span class="cr-sep">至</span>
+<input type="date" id="crTo" onchange="onCustomRangeChange()">
+<button class="cr-clear" onclick="clearCustomRange()">清除</button>
+</div>
+<div class="custom-range" id="customDay">
+<span class="cr-label">📅 选择某一天</span>
+<input type="date" id="crDay" onchange="onCustomDayChange()">
+</div>
+<div class="custom-range" id="customWeek">
+<span class="cr-label">📆 选择某周（自动取周一至周日）</span>
+<input type="week" id="crWeek" onchange="onCustomWeekChange()">
+</div>
+<div class="custom-range" id="customMonth">
+<span class="cr-label">🗓 选择某月</span>
+<input type="month" id="crMonth" onchange="onCustomMonthChange()">
+</div>
+
+<!-- Channel filter -->
+<div class="channel-filter-row">
+<span class="filter-label">渠道</span>
+<select class="date-input" id="chanSelect" onchange="onChannelChange()">
+<option value="all">全部渠道</option>
+<option value="线下回款">线下回款</option><option value="经销商">经销商</option><option value="而立私域回款">而立私域回款</option><option value="而立私域销售">而立私域销售</option><option value="自营">自营</option>
+</select>
+<select class="date-input" id="subChanSelect" onchange="onSubChannelChange()">
+<option value="all">全部细分渠道</option>
+</select>
+<button class="filter-pill" onclick="clearAllFilters()" style="background:#f5f5f7;color:#ff3b30;border:1px solid #ff3b30;">清空筛选</button>
+<span style="font-size:12px;color:var(--text3);margin-left:8px" id="filterSummary"></span>
+</div>
+
+<!-- KPI -->
+<div class="kpi-grid" id="kpiGrid"></div>
+
+<!-- Trend + Channel Pie -->
+<div class="chart-grid">
+<div class="card">
+<div class="card-header">
+<div><div class="card-title">销售趋势</div><div class="card-subtitle" id="trendSubtitle"></div></div>
+<div class="granularity-bar">
+<button class="gran-btn active" onclick="setGranularity('day',this)">日</button>
+<button class="gran-btn" onclick="setGranularity('week',this)">周</button>
+<button class="gran-btn" onclick="setGranularity('month',this)">月</button>
+</div>
+</div>
+<div class="chart-wrap" style="height:340px"><canvas id="trendChart"></canvas></div>
+</div>
+<div class="card">
+<div class="card-header"><div><div class="card-title">渠道占比</div><div class="card-subtitle">各渠道销售额分布</div></div></div>
+<div class="chart-wrap" style="height:340px"><canvas id="channelPie"></canvas></div>
+</div>
+</div>
+
+<!-- Channel Bar + Sub-channel Top -->
+<div class="chart-grid-2">
+<div class="card">
+<div class="card-header"><div><div class="card-title">渠道销售额对比</div><div class="card-subtitle">各渠道汇总</div></div></div>
+<div class="chart-wrap" style="height:320px"><canvas id="channelBar"></canvas></div>
+</div>
+<div class="card">
+<div class="card-header"><div><div class="card-title">细分渠道 TOP 15</div><div class="card-subtitle">按销售额排名</div></div></div>
+<div class="chart-wrap" style="height:320px"><canvas id="subChannelBar"></canvas></div>
+</div>
+</div>
+
+<!-- Tables -->
+<div class="table-card">
+<div class="card-header"><div class="card-title">渠道明细</div><div class="card-subtitle" id="tableCount"></div></div>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>渠道</th><th class="text-right">销售额</th><th class="text-right">占比</th><th class="text-right">日均</th><th>占比图</th></tr></thead><tbody id="chanTableBody"></tbody></table></div>
+</div>
+<div class="table-card">
+<div class="card-header"><div class="card-title">细分渠道明细</div><div class="card-subtitle" id="subTableCount"></div></div>
+<div class="table-wrap" style="max-height:500px;overflow-y:auto"><table><thead><tr><th>#</th><th>细分渠道</th><th class="text-right">销售额</th><th class="text-right">占比</th><th class="text-right">日均</th><th>占比图</th><th>每日明细</th></tr></thead><tbody id="subTableBody"></tbody></table></div>
+</div>
+
+<!-- ===== COMPARISON SECTION ===== -->
+<div class="card compare-section">
+<div class="compare-header">
+<div class="card-title">📊 数据对比</div>
+<select class="compare-select" id="cmpType" onchange="onCmpTypeChange()">
+<option value="day">天对比</option>
+<option value="week">周对比</option>
+<option value="month">月对比</option>
+<option value="custom">自定义范围</option>
+</select>
+<select class="compare-select" id="cmpChan" onchange="renderCompare()">
+<option value="all">全部渠道</option>
+<option value="线下回款">线下回款</option><option value="经销商">经销商</option><option value="而立私域回款">而立私域回款</option><option value="而立私域销售">而立私域销售</option><option value="自营">自营</option>
+</select>
+<select class="compare-select" id="cmpSubChan" onchange="renderCompare()">
+<option value="all">全部细分渠道</option>
+</select>
+</div>
+<div class="compare-grid">
+<div class="compare-card a" id="cmpCardA"></div>
+<div class="compare-card b" id="cmpCardB"></div>
+</div>
+<div class="diff-card" id="diffCard"></div>
+<div class="compare-chart-row">
+<div class="card"><div class="chart-wrap" style="height:280px"><canvas id="cmpChartA"></canvas></div></div>
+<div class="card"><div class="chart-wrap" style="height:280px"><canvas id="cmpChartB"></canvas></div></div>
+</div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+const ALL_SUBS = [];
+const RAW_DATA = [];
+const CH_COLORS = ['#0071e3','#34c759','#ff9500','#af52de','#ff2d55','#5ac8fa','#ffd60a','#bf5af2','#ff6482','#32d74b'];
+
+let allData = RAW_DATA;
+const DATA_MAX_DATE = (()=>{if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']>a?b['日期']:a,allData[0]['日期']);})();
+const DATA_MIN_DATE = (()=>{if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']<a?b['日期']:a,allData[0]['日期']);})();
+let timeFilter = 'all';
+let chanFilter = 'all';
+let subChanFilter = 'all';
+let granularity = 'day';
+
+function fmtMoney(v) {
+  v = Math.abs(v) < 0.01 ? 0 : v;
+  const sign = v < 0 ? '-' : '';
+  v = Math.abs(v);
+  if (v >= 10000) return sign + '¥' + (v/10000).toFixed(2) + '万';
+  return sign + '¥' + v.toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,',');
+}
+function fmtMoneyShort(v) {
+  v = Math.abs(v) < 0.01 ? 0 : v;
+  const sign = v < 0 ? '-' : '';
+  v = Math.abs(v);
+  if (v >= 1e8) return sign + '¥' + (v/1e8).toFixed(2) + '亿';
+  if (v >= 10000) return sign + '¥' + (v/10000).toFixed(0) + '万';
+  return sign + '¥' + v.toFixed(0);
+}
+function getMonday(d){const dt=new Date(d);const day=dt.getDay();const diff=dt.getDate()-day+(day===0?-6:1);return new Date(dt.setDate(diff))}
+function fmtDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parseDate(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
+function getWeekLabel(d){const m=getMonday(new Date(d));const sun=new Date(m);sun.setDate(sun.getDate()+6);return fmtDate(m)+' ~ '+fmtDate(sun)}
+
+function getDateRange(filter) {
+  const today = DATA_MAX_DATE ? new Date(DATA_MAX_DATE) : new Date(); today.setHours(0,0,0,0);
+  const t = fmtDate(today);
+  switch(filter) {
+    case 'today': return {from:t,to:t};
+    case 'yesterday': {const d=new Date(today);d.setDate(d.getDate()-1);const s=fmtDate(d);return {from:s,to:s};}
+    case 'daybefore': {const d=new Date(today);d.setDate(d.getDate()-2);const s=fmtDate(d);return {from:s,to:s};}
+    case 'thisweek': {return {from:fmtDate(getMonday(today)),to:t};}
+    case 'lastweek': {
+      const m=getMonday(today);const lm=new Date(m);lm.setDate(lm.getDate()-7);
+      const ls=new Date(lm);ls.setDate(ls.getDate()+6);
+      return {from:fmtDate(lm),to:fmtDate(ls)};
+    }
+    case 'thismonth': return {from:today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-01',to:t};
+    case 'lastmonth': {
+      const y=today.getMonth()===0?today.getFullYear()-1:today.getFullYear();
+      const m=today.getMonth()===0?12:today.getMonth();
+      return {from:y+'-'+String(m).padStart(2,'0')+'-01',to:y+'-'+String(m).padStart(2,'0')+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0')};
+    }
+    case 'custom_range': {
+      const f=document.getElementById('crFrom')?.value;
+      const to=document.getElementById('crTo')?.value;
+      if(f&&to) return {from:f,to:to};
+      return null;
+    }
+    case 'custom_day': {
+      const d=document.getElementById('crDay')?.value;
+      if(d) return {from:d,to:d};
+      return null;
+    }
+    case 'custom_week': {
+      const w=document.getElementById('crWeek')?.value; // YYYY-Www
+      if(w){const [y,wn]=w.split('-W');const monday=getMondayOfISOWeek(+y,+wn);const sunday=new Date(monday);sunday.setDate(sunday.getDate()+6);return {from:fmtDate(monday),to:fmtDate(sunday)};}
+      return null;
+    }
+    case 'custom_month': {
+      const m=document.getElementById('crMonth')?.value; // YYYY-MM
+      if(m){const [y,mn]=m.split('-');const lastDay=new Date(+y,+mn,0).getDate();return {from:m+'-01',to:m+'-'+String(lastDay).padStart(2,'0')};}
+      return null;
+    }
+    default: return null;
+  }
+}
+
+// Helper: get Monday of a given ISO year + week number
+function getMondayOfISOWeek(year, week) {
+  const simple = new Date(year,0,1+(week-1)*7);
+  const dow = simple.getDay();
+  const ISOweekStart = new Date(simple);
+  if (dow <= 4) ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+  else ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+  return ISOweekStart;
+}
+
+function getFilteredData() {
+  let data = allData;
+  if (timeFilter !== 'all') {
+    const r = getDateRange(timeFilter);
+    if (r) data = data.filter(d => d['日期'] >= r.from && d['日期'] <= r.to);
+    else if (timeFilter && timeFilter.startsWith('custom_')) data = []; // 用户选了自定义但还没填入时显示空
+  }
+  if (chanFilter !== 'all') data = data.filter(d => d['渠道'] === chanFilter);
+  if (subChanFilter !== 'all') data = data.filter(d => d['细分渠道'] === subChanFilter);
+  return data;
+}
+
+function aggByDate(data, gran) {
+  // Custom/any user-picked range: don't truncate
+  const isCustom = timeFilter && (timeFilter.startsWith('custom_') || timeFilter==='today' || timeFilter==='yesterday' || timeFilter==='daybefore' || timeFilter==='thisweek' || timeFilter==='lastweek' || timeFilter==='thismonth' || timeFilter==='lastmonth');
+  if (gran === 'day') {
+    const map = {};
+    data.forEach(d => { map[d['日期']] = (map[d['日期']]||0) + d['销售额']; });
+    let arr = Object.entries(map).map(([d,s]) => ({label:d,sales:s})).sort((a,b) => a.label.localeCompare(b.label));
+    if (arr.length > 30 && !isCustom) arr = arr.slice(-30);
+    return arr;
+  } else if (gran === 'week') {
+    const map = {};
+    data.forEach(d => {
+      const w = getWeekLabel(d['日期']);
+      map[w] = (map[w]||0) + d['销售额'];
+    });
+    let arr = Object.entries(map).map(([w,s]) => ({label:w,sales:s})).sort((a,b) => a.label.localeCompare(b.label));
+    if (arr.length > 4 && !isCustom) arr = arr.slice(-4);
+    return arr;
+  } else {
+    const map = {};
+    data.forEach(d => {
+      const m = d['日期'].slice(0,7);
+      map[m] = (map[m]||0) + d['销售额'];
+    });
+    const curYear = DATA_MAX_DATE ? DATA_MAX_DATE.slice(0,4) : new Date().getFullYear().toString();
+    return Object.entries(map).map(([m,s]) => ({label:m,sales:s})).sort((a,b) => a.label.localeCompare(b.label)).filter(x => x.label.startsWith(curYear));
+  }
+}
+
+function aggByChannel(data) {
+  const map = {};
+  data.forEach(d => {
+    if(!map[d['渠道']]) map[d['渠道']] = {channel:d['渠道'],sales:0,count:0};
+    map[d['渠道']].sales += d['销售额'];
+    map[d['渠道']].count++;
+  });
+  return Object.values(map).sort((a,b) => b.sales - a.sales);
+}
+
+function aggBySub(data) {
+  const map = {};
+  data.forEach(d => {
+    if(!map[d['细分渠道']]) map[d['细分渠道']] = {sub:d['细分渠道'],sales:0,count:0,daily:{}};
+    map[d['细分渠道']].sales += d['销售额'];
+    map[d['细分渠道']].count++;
+    // Aggregate daily sales for this sub-channel
+    const date = d['日期'];
+    map[d['细分渠道']].daily[date] = (map[d['细分渠道']].daily[date]||0) + d['销售额'];
+  });
+  return Object.values(map).map(c => {
+    c.dailyData = Object.entries(c.daily).map(([date,sales]) => ({date,sales})).sort((a,b) => a.date.localeCompare(b.date));
+    delete c.daily;
+    return c;
+  }).sort((a,b) => b.sales - a.sales);
+}
+
+// ===== Charts =====
+let trendChart, channelPieChart, channelBarChart, subChannelBarChart, cmpChartA, cmpChartB;
+
+function destroyCharts() {
+  [trendChart,channelPieChart,channelBarChart,subChannelBarChart,cmpChartA,cmpChartB].forEach(c=>{if(c)c.destroy()});
+  trendChart=channelPieChart=channelBarChart=subChannelBarChart=cmpChartA=cmpChartB=null;
+}
+
+function formatTrendLabel(l) {
+  if (granularity==='day') return String(l).slice(-5);
+  if (granularity==='week') {
+    const parts = String(l).split(' ~ ');
+    if (parts.length === 2) {
+      const s = parts[0].slice(-5).replace('-','/');
+      const e = parts[1].slice(-5).replace('-','/');
+      return s + '~' + e;
+    }
+    return l.slice(5,10).replace('-','/') + '周';
+  }
+  return l;
+}
+
+function renderAll() {
+  const data = getFilteredData();
+  const totalSales = data.reduce((s,d)=>s+d['销售额'],0);
+  const dates = [...new Set(data.map(d=>d['日期']))];
+  const dayCount = dates.length;
+  const dailyAvg = dayCount > 0 ? totalSales / dayCount : 0;
+  const chanAgg = aggByChannel(data);
+  const topChan = chanAgg[0] || {channel:'-',sales:0};
+  const subAgg = aggBySub(data);
+
+  // KPI + 月均 (only when showing all data)
+  const months = [...new Set(data.map(d=>d['日期'].slice(0,7)))].length;
+  const monthAvg = timeFilter==='all' && months>0 ? totalSales/months : null;
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">总销售额</div><div class="kpi-value">${fmtMoney(totalSales)}</div><div class="kpi-sub">${dayCount} 天</div></div>
+    ${monthAvg!==null?`<div class="kpi-card"><div class="kpi-label">月均销售额</div><div class="kpi-value">${fmtMoney(monthAvg)}</div><div class="kpi-sub">${months} 个月 · 日均 ${fmtMoneyShort(dailyAvg)}</div></div>`:`<div class="kpi-card"><div class="kpi-label">日均销售额</div><div class="kpi-value">${fmtMoney(dailyAvg)}</div><div class="kpi-sub">${dayCount} 天</div></div>`}
+    <div class="kpi-card"><div class="kpi-label">最高渠道</div><div class="kpi-value" style="font-size:24px">${topChan.channel}</div><div class="kpi-sub">${fmtMoney(topChan.sales)} · ${chanAgg.length} 个渠道</div></div>
+    <div class="kpi-card"><div class="kpi-label">活跃细分渠道</div><div class="kpi-value">${subAgg.length}</div><div class="kpi-sub">覆盖 ${chanAgg.length} 个主渠道</div></div>
+  `;
+
+  document.getElementById('filterSummary').textContent =
+    (chanFilter!=='all' || subChanFilter!=='all') ?
+    `当前筛选：${chanFilter==='all'?'全部渠道':chanFilter}${subChanFilter!=='all'?' → '+subChanFilter:''} · ${data.length}条 / ${dayCount}天` : '';
+
+  // Trend combo chart (bar + line + 环比)
+  const trendData = aggByDate(data, granularity);
+  // Build prev-period lookup for 环比
+  const prevMap = {};
+  const chanFilteredData = (chanFilter==='all' && subChanFilter==='all') ? allData : allData.filter(d => { if (chanFilter!=='all' && d['渠道']!==chanFilter) return false; if (subChanFilter!=='all' && d['细分渠道']!==subChanFilter) return false; return true; });
+  const allTrend = aggByDate(chanFilteredData, granularity);
+  allTrend.forEach((d,i,arr) => { if(i>0) prevMap[d.label] = arr[i-1].sales; });
+  // For daily, also try comparing to same day last week if prev day missing
+  if (granularity==='day') {
+    allTrend.forEach(d => {
+      if (prevMap[d.label] === undefined) {
+        const dt = new Date(d.label); dt.setDate(dt.getDate()-7);
+        const s7 = fmtDate(dt);
+        const found = allTrend.find(x=>x.label===s7);
+        if (found) prevMap[d.label] = found.sales;
+      }
+    });
+  }
+  const prevSales = trendData.map(d=>prevMap[d.label]||null);
+  const hbPcts = trendData.map((d,i) => prevSales[i] ? ((d.sales-prevSales[i])/prevSales[i]*100) : null);
+  const trendCtx = document.getElementById('trendChart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(trendCtx, {
+    type: 'bar',
+    data: {
+      labels: trendData.map(d => formatTrendLabel(d.label)),
+      datasets: [{
+        label: '本期销售额', data: trendData.map(d=>d.sales),
+        backgroundColor: 'rgba(0,113,227,0.65)', borderRadius: 5, borderSkipped: false,
+        order: 2
+      },{
+        label: '上期销售额（环比基准）', data: prevSales,
+        type: 'line', borderColor: '#ff9500', backgroundColor: 'transparent',
+        borderWidth: 2, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#ff9500',
+        spanGaps: false, order: 1
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: {mode:'index',intersect:false},
+      plugins: {
+        legend: {display:true,position:'top',labels:{usePointStyle:true,pointStyleWidth:6,font:{size:11},color:'#6e6e73',padding:12}},
+        tooltip: {
+          backgroundColor:'#1d1d1f',
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.datasetIndex === 0) {
+                const hb = hbPcts[ctx.dataIndex];
+                const hbStr = hb !== null ? (' 环比'+(hb>=0?'+':'')+hb.toFixed(1)+'%') : '';
+                return '本期 ¥'+ctx.parsed.y.toLocaleString() + hbStr;
+              }
+              return '上期 ¥'+ctx.parsed.y.toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid:{display:false}, ticks:{font:{size:11},color:'#aeaeb2',maxTicksLimit:granularity==='day'?8:12,maxRotation:0} },
+        y: { grid:{color:'#f0f0f2'}, ticks:{font:{size:11},color:'#aeaeb2',callback:v=>(v/10000).toFixed(0)+'万'}, beginAtZero: true }
+      }
+    },
+    plugins: [{
+      id: 'hbLabels',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const meta = chart.getDatasetMeta(0);
+        const barWidth = meta.data[0]?.width || 0;
+        if (barWidth < 28) return;
+        meta.data.forEach((bar, i) => {
+          const pct = hbPcts[i];
+          if (pct === null) return;
+          const y = bar.y - 6;
+          ctx.save();
+          ctx.font = 'bold 9px -apple-system,sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = pct >= 0 ? '#34c759' : '#ff3b30';
+          ctx.fillText((pct>=0?'+':'')+pct.toFixed(0)+'%', bar.x, y);
+          ctx.restore();
+        });
+      }
+    }]
+  });
+  // Trend subtitle: reflect current time filter + range
+  let trendSub = '';
+  if (timeFilter && timeFilter.startsWith('custom_')) {
+    const r = getDateRange(timeFilter);
+    if (r) trendSub = `范围 ${r.from} ~ ${r.to} · `;
+  } else if (timeFilter && timeFilter !== 'all') {
+    const r = getDateRange(timeFilter);
+    if (r) trendSub = `范围 ${r.from} ~ ${r.to} · `;
+  }
+  trendSub += (granularity==='day'?'日汇总' : granularity==='week'?'按周汇总' : '按月汇总') + ' · 柱体=本期 橙线=上期';
+  document.getElementById('trendSubtitle').textContent = trendSub;
+
+  // Pie — switches to sub-channel breakdown when a channel is selected
+  const pieCtx = document.getElementById('channelPie').getContext('2d');
+  if (channelPieChart) channelPieChart.destroy();
+  const showSubPie = chanFilter !== 'all';
+  const pieData = showSubPie ? aggBySub(data).slice(0,8) : chanAgg;
+  const pieLabelKey = showSubPie ? 'sub' : 'channel';
+  const pieTotal = pieData.reduce((s,c)=>s+c.sales,0);
+  const pieTitleEl = document.getElementById('channelPie').closest('.card').querySelector('.card-title');
+  if (pieTitleEl) pieTitleEl.textContent = showSubPie ? '细分渠道销售占比' : '渠道销售占比';
+  channelPieChart = new Chart(pieCtx, {
+    type: 'doughnut',
+    data: {
+      labels: pieData.map(c=>(c[pieLabelKey]||'').length>10?(c[pieLabelKey]||'').slice(0,10)+'…':(c[pieLabelKey]||'')),
+      datasets: [{ data: pieData.map(c=>c.sales), backgroundColor: CH_COLORS.slice(0,pieData.length), borderWidth:0, hoverBorderWidth:3, hoverBorderColor:'#fff' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { legend:{position:'bottom',labels:{padding:16,usePointStyle:true,pointStyleWidth:8,font:{size:12},color:'#6e6e73'}},
+        tooltip:{backgroundColor:'#1d1d1f',callbacks:{label:ctx=>ctx.label+': ¥'+ctx.parsed.toLocaleString()+' ('+((ctx.parsed/pieTotal)*100).toFixed(1)+'%)'}} }
+    }
+  });
+
+  // Channel/Sub-channel Bar — shows 环比 growth TOP15 when channel selected
+  const barCtx = document.getElementById('channelBar').getContext('2d');
+  if (channelBarChart) channelBarChart.destroy();
+  const showSubBars = chanFilter !== 'all';
+  const barTitleEl = document.getElementById('channelBar').closest('.card').querySelector('.card-title');
+  const barSubEl = document.getElementById('channelBar').closest('.card').querySelector('.card-subtitle');
+  
+  if (showSubBars) {
+    // Compute 环比 growth for each sub-channel
+    const curSubSales = aggBySub(data);
+    // Build previous period data (same channel, previous equivalent time window)
+    let prevRange = null;
+    if (timeFilter === 'all') {
+      const d = new Date(DATA_MAX_DATE); d.setHours(0,0,0,0);
+      const cy = d.getFullYear(), cm = d.getMonth()+1;
+      const thisMonth = cy+'-'+String(cm).padStart(2,'0');
+      const py = cm===1 ? cy-1 : cy, pm = cm===1 ? 12 : cm-1;
+      const prevMonth = py+'-'+String(pm).padStart(2,'0');
+      prevRange = {from: prevMonth+'-01', to: prevMonth+'-'+String(new Date(py,pm,0).getDate()).padStart(2,'0')};
+    } else {
+      const r = getDateRange(timeFilter);
+      if (r) {
+        const dFrom = new Date(r.from), dTo = new Date(r.to);
+        const dur = dTo - dFrom;
+        const prevTo = new Date(dFrom.getTime() - 86400000);
+        const prevFrom = new Date(prevTo.getTime() - dur);
+        prevRange = {from: fmtDate(prevFrom), to: fmtDate(prevTo)};
+      }
+    }
+    let prevData = [];
+    if (prevRange) {
+      prevData = allData.filter(d => d['渠道']===chanFilter && d['日期']>=prevRange.from && d['日期']<=prevRange.to);
+    }
+    const prevSubSales = aggBySub(prevData);
+    const prevMap = {};
+    prevSubSales.forEach(s => { prevMap[s.sub] = s.sales; });
+    
+    // Compute growth rate for each sub-channel
+    const growthList = curSubSales.map(s => {
+      const prev = prevMap[s.sub] || 0;
+      const growth = prev > 0 ? ((s.sales - prev) / prev * 100) : (s.sales > 0 ? 100 : 0);
+      return {name: s.sub, sales: s.sales, prevSales: prev, growth: growth};
+    }).filter(s => s.prevSales > 0 || s.sales > 0).sort((a,b) => b.growth - a.growth).slice(0, 15);
+    
+    if (barTitleEl) barTitleEl.textContent = '细分渠道环比增长 TOP15';
+    if (barSubEl) barSubEl.textContent = chanFilter + ' · 环比'+(timeFilter==='all'?'月':'期')+'对比';
+    
+    channelBarChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: growthList.map(c=>c.name.length>10?c.name.slice(0,10)+'…':c.name),
+        datasets: [{ label:'环比增长%', data: growthList.map(c=>c.growth), 
+          backgroundColor: growthList.map(c=>c.growth>=0?'rgba(52,199,89,0.75)':'rgba(255,59,48,0.75)'), 
+          borderRadius: 6, borderSkipped: false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1d1d1f',
+          callbacks:{label:ctx=>{
+            const g = growthList[ctx.dataIndex];
+            return '环比 '+(g.growth>=0?'+':'')+g.growth.toFixed(1)+'% | 本期 ¥'+g.sales.toLocaleString()+' | 上期 ¥'+g.prevSales.toLocaleString();
+          }} } },
+        scales: {
+          x: { grid:{display:false}, ticks:{font:{size:11},color:'#6e6e73',maxRotation:25} },
+          y: { grid:{color:'#f0f0f2'}, ticks:{font:{size:11},color:'#aeaeb2',callback:v=>v.toFixed(0)+'%'} }
+        }
+      },
+      plugins: [{
+        id: 'growthLabels',
+        afterDatasetsDraw(chart) {
+          const ctx = chart.ctx;
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar, i) => {
+            const g = growthList[i];
+            ctx.save();
+            ctx.font = 'bold 9px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            const label = (g.growth>=0?'+':'')+g.growth.toFixed(0)+'%';
+            ctx.fillStyle = g.growth>=0?'#34c759':'#ff3b30';
+            const y = g.growth >= 0 ? bar.y - 6 : bar.y + 14;
+            ctx.fillText(label, bar.x, y);
+            ctx.restore();
+          });
+        }
+      }]
+    });
+  } else {
+    // Show channel breakdown (original behavior)
+    const barData = chanAgg;
+    const barTop = barData.slice(0, barData.length);
+    if (barTitleEl) barTitleEl.textContent = '渠道销售额对比';
+    if (barSubEl) barSubEl.textContent = '各渠道汇总';
+    channelBarChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: barTop.map(c=>(c.channel||'').length>12?(c.channel||'').slice(0,12)+'…':(c.channel||'')),
+        datasets: [{ label:'销售额',data:barTop.map(c=>c.sales),backgroundColor:barTop.map((_,i)=>CH_COLORS[i%CH_COLORS.length]),borderRadius:6,borderSkipped:false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1d1d1f',callbacks:{label:ctx=>'¥'+ctx.parsed.y.toLocaleString()}} },
+        scales: {
+          x: { grid:{display:false}, ticks:{font:{size:11},color:'#6e6e73',maxRotation:25} },
+          y: { grid:{color:'#f0f0f2'}, ticks:{font:{size:11},color:'#aeaeb2',callback:v=>(v/10000).toFixed(1)+'万'} }
+        }
+      },
+      plugins: [{
+        id: 'barValues',
+        afterDatasetsDraw(chart) {
+          const ctx = chart.ctx;
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar, i) => {
+            const v = chart.data.datasets[0].data[i];
+            ctx.save();
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1d1d1f';
+            const label = v >= 10000 ? (v/10000).toFixed(1)+'万' : '¥'+v.toFixed(0);
+            ctx.fillText(label, bar.x, bar.y - 6);
+            ctx.restore();
+          });
+        }
+      }]
+    });
+  }
+
+  // Sub Top 15
+  const top15 = subAgg.slice(0,15);
+  const subCtx = document.getElementById('subChannelBar').getContext('2d');
+  if (subChannelBarChart) subChannelBarChart.destroy();
+  subChannelBarChart = new Chart(subCtx, {
+    type: 'bar',
+    data: {
+      labels: top15.map(c=>c.sub.length>12?c.sub.slice(0,12)+'…':c.sub),
+      datasets: [{ label:'销售额',data:top15.map(c=>c.sales),backgroundColor:top15.map((_,i)=>CH_COLORS[i%CH_COLORS.length]),borderRadius:6,borderSkipped:false }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1d1d1f',callbacks:{label:ctx=>'¥'+ctx.parsed.x.toLocaleString()}} },
+      scales: {
+        x: { grid:{color:'#f0f0f2'}, ticks:{font:{size:11},color:'#aeaeb2',callback:v=>(v/10000).toFixed(1)+'万'} },
+        y: { grid:{display:false}, ticks:{font:{size:11},color:'#6e6e73'} }
+      }
+    }
+  });
+
+  // Channel table
+  const maxChan = chanAgg[0]?.sales||1;
+  const chanCls = ['c0','c1','c2','c3','c4'];
+  document.getElementById('chanTableBody').innerHTML = chanAgg.map((c,i)=>`
+    <tr><td><span class="rank-badge ${i<3?'top'+(i+1):''}">${i+1}</span></td>
+    <td><span class="channel-tag ${chanCls[i%5]}">${c.channel}</span></td>
+    <td class="text-right sales-num">${fmtMoney(c.sales)}</td>
+    <td class="text-right">${((c.sales/totalSales)*100).toFixed(1)}%</td>
+    
+    <td class="text-right">${fmtMoney(c.sales/dayCount)}</td>
+    <td><div class="progress-bar"><div class="progress-fill" style="width:${((c.sales/maxChan)*100).toFixed(0)}%"></div></div></td></tr>
+  `).join('');
+  document.getElementById('tableCount').textContent = chanAgg.length+' 个渠道 · '+dayCount+' 天';
+
+  // Sub table
+  const maxSub = subAgg[0]?.sales||1;
+  const subId = (s) => 'sub-' + s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g,'_');
+  document.getElementById('subTableBody').innerHTML = subAgg.map((c,i)=>`
+    <tr>
+      <td><span class="rank-badge ${i<3?'top'+(i+1):''}">${i+1}</span></td>
+      <td>${c.sub}</td>
+      <td class="text-right sales-num">${fmtMoney(c.sales)}</td>
+      <td class="text-right">${((c.sales/totalSales)*100).toFixed(1)}%</td>
+      <td class="text-right">${fmtMoney(c.sales/dayCount)}</td>
+      <td><div class="progress-bar"><div class="progress-fill" style="width:${((c.sales/maxSub)*100).toFixed(0)}%"></div></div></td>
+      <td>${dayCount > 1 ? `<button class="daily-toggle" onclick="toggleDailyDetail(this,'${subId(c.sub)}')" title="展开每日明细">▶</button>` : '<span style="color:var(--text3);font-size:11px">单日</span>'}</td>
+    </tr>
+    <tr class="daily-detail-row" id="${subId(c.sub)}" style="display:none">
+      <td colspan="7">
+        <div class="daily-mini-wrap">
+          <table class="daily-mini-table">
+            <thead><tr><th>日期</th><th class="text-right">销售额</th></tr></thead>
+            <tbody>${c.dailyData.map(d=>`<tr><td>${d.date.slice(5)}</td><td class="text-right sales-num">${fmtMoney(d.sales)}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('subTableCount').textContent = subAgg.length+' 个细分渠道';
+
+  // Comparison
+  renderCompare();
+}
+
+// ===== DAILY DETAIL TOGGLE =====
+function toggleDailyDetail(btn, id) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  const isOpen = row.classList.contains('show');
+  if (isOpen) {
+    row.classList.remove('show');
+    btn.textContent = '▶';
+    btn.classList.remove('open');
+  } else {
+    row.classList.add('show');
+    btn.textContent = '▼';
+    btn.classList.add('open');
+  }
+}
+
+// ===== DOWNLOAD REPORT =====
+function downloadReport() {
+  if (!allData || allData.length === 0) {
+    showToast('暂无数据，请先上传表格');
+    return;
+  }
+  showLoading();
+
+  // Build ALL_SUBS from current data
+  const allSubs = [...new Set(allData.map(d => d['细分渠道']))].sort();
+  const allSubsJson = JSON.stringify(allSubs);
+
+  // Build RAW_DATA from current data
+  const rawDataJson = JSON.stringify(allData);
+
+  // Get current HTML source
+  let html = document.documentElement.outerHTML;
+
+  // Replace the empty ALL_SUBS and RAW_DATA with current data
+  html = html.replace(
+    /const ALL_SUBS = \[.*?\];/s,
+    'const ALL_SUBS = ' + allSubsJson + ';'
+  );
+  html = html.replace(
+    /const RAW_DATA = \[.*?\];/s,
+    'const RAW_DATA = ' + rawDataJson + ';'
+  );
+
+  // Remove download button from the report (it's a snapshot, no need)
+  html = html.replace(/<button class="download-btn"[^>]*>[\s\S]*?<\/button>/, '');
+  // Remove upload button too
+  html = html.replace(/<button class="upload-btn"[^>]*>[\s\S]*?<\/button>/, '');
+  // Remove file input
+  html = html.replace(/<input type="file"[^>]*>/, '');
+
+  // Update lastUpdate text
+  const udates = [...new Set(allData.map(d => d['日期']))].sort();
+  const reportLabel = '📋 正式报告 | 数据截至 ' + udates[udates.length-1] + ' | 共 ' + allData.length + ' 条 | ' + new Date().toISOString().slice(0,10);
+  html = html.replace(/<span class="last-update"[^>]*>[\s\S]*?<\/span>/, '<span class="last-update" id="lastUpdate">' + reportLabel + '</span>');
+
+  // Trigger download
+  const blob = new Blob(['<!DOCTYPE html>\n' + html], {type: 'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const today = new Date().toISOString().slice(0,10);
+  a.download = '九峰牧场销售看板_' + today + '.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  hideLoading();
+  showToast('报告已下载！文件内嵌 ' + allData.length + ' 条最新数据');
+}
+
+// ===== REFRESH FROM FEISHU (via GitHub Pages data.json) =====
+const DATA_URL = 'data.json';
+
+function refreshFromFeishu() {
+  const btn = document.getElementById('refreshBtn');
+  if (btn.classList.contains('loading')) return Promise.reject('already loading');
+  btn.classList.add('loading');
+  showLoading();
+  restoreContainer();
+
+  return fetch(DATA_URL)
+    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      if (!data.records || data.records.length === 0) throw new Error('无数据');
+
+      allData = data.records;
+
+      // Rebuild dropdowns from fresh data
+      const uchan = [...new Set(allData.map(d => d['渠道']))].sort();
+      const usub = [...new Set(allData.map(d => d['细分渠道']))].sort();
+      document.getElementById('chanSelect').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+      document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
+      document.getElementById('cmpChan').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+      document.getElementById('cmpSubChan').innerHTML = '<option value="all">全部细分渠道</option>';
+
+      // Reset filters
+      timeFilter='all'; chanFilter='all'; subChanFilter='all';
+      document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
+      document.querySelector('[data-filter="all"]').classList.add('active');
+      document.getElementById('chanSelect').value='all';
+      document.getElementById('subChanSelect').value='all';
+
+      document.getElementById('lastUpdate').textContent = '🔄 飞书在线表格 | 数据截至 '+data.date_range.split(' ~ ')[1]+' | 共 '+data.record_count+' 条 | 刷新时间 '+data.updated_at;
+      document.getElementById('downloadBtn').disabled = false;
+
+      destroyCharts();
+      renderAll();
+      hideLoading();
+      btn.classList.remove('loading');
+      showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
+    })
+    .catch(err => {
+      hideLoading();
+      btn.classList.remove('loading');
+      showToast('❌ 刷新失败：'+err.message+' — 请检查网络或使用上传备选');
+      console.error('Feishu refresh error:', err);
+    });
+}
+
+// ===== FILTERS =====
+function setTimeFilter(filter, btn) {
+  timeFilter = filter;
+  document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // Toggle custom range pickers
+  document.getElementById('customRange').classList.toggle('show', filter==='custom_range');
+  document.getElementById('customDay').classList.toggle('show', filter==='custom_day');
+  document.getElementById('customWeek').classList.toggle('show', filter==='custom_week');
+  document.getElementById('customMonth').classList.toggle('show', filter==='custom_month');
+  // Init pickers with sensible defaults on first activation
+  if (filter==='custom_range') initCustomRange();
+  if (filter==='custom_day') initCustomDay();
+  if (filter==='custom_week') initCustomWeek();
+  if (filter==='custom_month') initCustomMonth();
+  renderAll();
+}
+
+function initCustomRange(){
+  const f=document.getElementById('crFrom'), t=document.getElementById('crTo');
+  if(DATA_MIN_DATE) f.min = DATA_MIN_DATE;
+  if(DATA_MAX_DATE) t.max = DATA_MAX_DATE;
+  if(!f.value && DATA_MAX_DATE){const d=new Date(DATA_MAX_DATE);d.setDate(d.getDate()-6);f.value=fmtDate(d);t.value=DATA_MAX_DATE;}
+}
+function initCustomDay(){
+  const e=document.getElementById('crDay');
+  if(DATA_MIN_DATE) e.min = DATA_MIN_DATE;
+  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE; if(!e.value) e.value = DATA_MAX_DATE;}
+}
+function initCustomWeek(){
+  const e=document.getElementById('crWeek');
+  if(DATA_MIN_DATE){const [y,mn,dy]=DATA_MIN_DATE.split('-');e.min = `${y}-W${getISOWeek(new Date(+y,+mn-1,+dy))}`;}
+  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE; if(!e.value){const [y,mn,dy]=DATA_MAX_DATE.split('-');e.value = `${y}-W${String(getISOWeek(new Date(+y,+mn-1,+dy))).padStart(2,'0')}`;}}
+}
+function initCustomMonth(){
+  const e=document.getElementById('crMonth');
+  if(DATA_MIN_DATE) e.min = DATA_MIN_DATE.slice(0,7);
+  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE.slice(0,7); if(!e.value) e.value = DATA_MAX_DATE.slice(0,7);}
+}
+
+function onCustomRangeChange(){
+  if(timeFilter==='custom_range') renderAll();
+}
+function onCustomDayChange(){
+  if(timeFilter==='custom_day') renderAll();
+}
+function onCustomWeekChange(){
+  if(timeFilter==='custom_week') renderAll();
+}
+function onCustomMonthChange(){
+  if(timeFilter==='custom_month') renderAll();
+}
+
+function clearCustomRange(){
+  document.getElementById('crFrom').value='';
+  document.getElementById('crTo').value='';
+  setTimeFilter('all', document.querySelector('.filter-pill[data-filter="all"]'));
+}
+
+function getISOWeek(d){
+  const dt=new Date(d);dt.setHours(0,0,0,0);dt.setDate(dt.getDate()+3-(dt.getDay()+6)%7);
+  const week1=new Date(dt.getFullYear(),0,4);
+  return 1+Math.round(((dt-week1)/86400000-3+(week1.getDay()+6)%7)/7);
+}
+
+function clearAllFilters() {
+  timeFilter = 'all'; chanFilter = 'all'; subChanFilter = 'all'; granularity = 'day';
+  document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
+  document.querySelector('.filter-bar .filter-pill[data-filter="all"]').classList.add('active');
+  // Hide all custom panels and reset values
+  ['customRange','customDay','customWeek','customMonth'].forEach(id=>document.getElementById(id).classList.remove('show'));
+  ['crFrom','crTo','crDay','crWeek','crMonth'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('chanSelect').value = 'all';
+  const subSel = document.getElementById('subChanSelect');
+  subSel.innerHTML = '<option value="all">全部细分渠道</option>';
+  ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+  subSel.value = 'all';
+  document.getElementById('trendDay').classList.add('active');
+  document.getElementById('trendMonth').classList.remove('active');
+  document.getElementById('cmpDay').classList.add('active');
+  document.getElementById('cmpMonth').classList.remove('active');
+  document.getElementById('cmpWeek').classList.remove('active');
+  cmpType = 'day';
+  cmpA = ''; cmpB = ''; cmpChan = 'all'; cmpSub = 'all';
+  renderAll();
+}
+
+function onChannelChange() {
+  chanFilter = document.getElementById('chanSelect').value;
+  const subSel = document.getElementById('subChanSelect');
+  subSel.innerHTML = '<option value="all">全部细分渠道</option>';
+  if (chanFilter !== 'all') {
+    const subs = [...new Set(allData.filter(d=>d['渠道']===chanFilter).map(d=>d['细分渠道']))].sort();
+    subs.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+  } else {
+    ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+  }
+    subChanFilter = 'all';
+  subSel.value = 'all';
+  renderAll();
+}
+
+function onSubChannelChange() {
+  subChanFilter = document.getElementById('subChanSelect').value;
+  renderAll();
+}
+
+function setGranularity(gr, btn) {
+  granularity = gr;
+  document.querySelectorAll('.gran-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  destroyCharts();
+  renderAll();
+}
+
+// ===== COMPARISON =====
+function getAvailablePeriods(type) {
+  const dates = [...new Set(allData.map(d=>d['日期']))].sort();
+  if (type === 'day') return dates.map(d => ({value:d, label:d.slice(5)}));
+  if (type === 'week') {
+    const weeks = new Set();
+    dates.forEach(d => { weeks.add(getWeekLabel(d)); });
+    return [...weeks].sort().map(w => {
+      const parts = w.split(' ~ ');
+      if (parts.length===2) return {value:w, label:parts[0].slice(5)+'~'+parts[1].slice(5)};
+      return {value:w, label:w};
+    });
+  }
+  const months = new Set();
+  dates.forEach(d => { months.add(d.slice(0,7)); });
+  return [...months].sort().map(m => {
+    const [y,mn] = m.split('-');
+    return {value:m, label: y+'年'+parseInt(mn)+'月'};
+  });
+}
+
+function getPeriodData(periodType, periodValue) {
+  let data = allData;
+  const cmpChan = document.getElementById('cmpChan').value;
+  const cmpSub = document.getElementById('cmpSubChan').value;
+  if (cmpChan !== 'all') data = data.filter(d => d['渠道'] === cmpChan);
+  if (cmpSub !== 'all') data = data.filter(d => d['细分渠道'] === cmpSub);
+
+  if (periodType === 'day') {
+    return data.filter(d => d['日期'] === periodValue);
+  } else if (periodType === 'week') {
+    const [from,to] = periodValue.split(' ~ ');
+    return data.filter(d => d['日期'] >= from && d['日期'] <= to);
+  } else if (periodType === 'custom') {
+    // periodValue: "from|to" or "from|to|label"
+    const [from,to] = periodValue.split('|');
+    if(from && to) return data.filter(d => d['日期'] >= from && d['日期'] <= to);
+    return [];
+  } else {
+    return data.filter(d => d['日期'].startsWith(periodValue));
+  }
+}
+
+function buildPeriodSelector(id, type, defaultVal) {
+  const periods = getAvailablePeriods(type);
+  let html = '<select class="compare-select" onchange="renderCompare()" id="'+id+'">';
+  periods.forEach(p => { html += '<option value="'+p.value+'"'+(p.value===defaultVal?' selected':'')+'>'+p.label+'</option>'; });
+  html += '</select>';
+  return html;
+}
+
+function onCmpTypeChange() {
+  const type = document.getElementById('cmpType').value;
+  // Force re-render so the custom branch kicks in
+  const cardA = document.getElementById('cmpCardA');
+  const cardB = document.getElementById('cmpCardB');
+  cardA.innerHTML = '';
+  cardB.innerHTML = '';
+  renderCompare();
+}
+
+function onCmpChanChange() {
+  const chan = document.getElementById('cmpChan').value;
+  const subSel = document.getElementById('cmpSubChan');
+  subSel.innerHTML = '<option value="all">全部细分渠道</option>';
+  if (chan !== 'all') {
+    [...new Set(allData.filter(d=>d['渠道']===chan).map(d=>d['细分渠道']))].sort().forEach(s => {
+      subSel.innerHTML += '<option value="'+s+'">'+s+'</option>';
+    });
+  } else {
+    ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+  }
+    renderCompare();
+}
+
+function renderCompare() {
+  const type = document.getElementById('cmpType').value;
+  const periods = getAvailablePeriods(type);
+  const last = periods[periods.length-1]?.value || '';
+  const prev = periods.length >= 2 ? periods[periods.length-2]?.value : last;
+
+  // Ensure pickers exist
+  let pickerA = document.getElementById('cmpPickerA');
+  let pickerB = document.getElementById('cmpPickerB');
+  if (!pickerA || (type==='custom' && pickerA.tagName!=='INPUT')) {
+    if (type === 'custom') {
+      const today = DATA_MAX_DATE || fmtDate(new Date());
+      const a1 = (()=>{const d=new Date(today);d.setDate(d.getDate()-6);return fmtDate(d);})();
+      const b1 = (()=>{const d=new Date(today);d.setDate(d.getDate()-13);return fmtDate(d);})();
+      const a2 = (()=>{const d=new Date(today);d.setDate(d.getDate()-20);return fmtDate(d);})();
+      const b2 = (()=>{const d=new Date(today);d.setDate(d.getDate()-27);return fmtDate(d);})();
+      document.getElementById('cmpCardA').innerHTML =
+        '<div class="compare-label a">对比项 A</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="date" class="compare-select" id="cmpPickerA" value="'+a1+'" onchange="renderCompare()" style="flex:1">'+
+        '<span style="color:var(--text2);font-size:12px">至</span>'+
+        '<input type="date" class="compare-select" id="cmpPickerAto" value="'+today+'" onchange="renderCompare()" style="flex:1"></div>';
+      document.getElementById('cmpCardB').innerHTML =
+        '<div class="compare-label b">对比项 B</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="date" class="compare-select" id="cmpPickerB" value="'+b1+'" onchange="renderCompare()" style="flex:1">'+
+        '<span style="color:var(--text2);font-size:12px">至</span>'+
+        '<input type="date" class="compare-select" id="cmpPickerBto" value="'+b2+'" onchange="renderCompare()" style="flex:1"></div>';
+    } else {
+      document.getElementById('cmpCardA').innerHTML = '<div class="compare-label a">对比项 A</div>'+buildPeriodSelector('cmpPickerA', type, last);
+      document.getElementById('cmpCardB').innerHTML = '<div class="compare-label b">对比项 B</div>'+buildPeriodSelector('cmpPickerB', type, prev);
+    }
+    pickerA = document.getElementById('cmpPickerA');
+    pickerB = document.getElementById('cmpPickerB');
+  }
+
+  // Resolve value depending on type
+  let valA, valB;
+  if (type === 'custom') {
+    const aTo = document.getElementById('cmpPickerAto')?.value || DATA_MAX_DATE;
+    const bTo = document.getElementById('cmpPickerBto')?.value || DATA_MAX_DATE;
+    valA = `${pickerA.value||DATA_MIN_DATE}|${aTo}`;
+    valB = `${pickerB.value||DATA_MIN_DATE}|${bTo}`;
+  } else {
+    valA = pickerA.value;
+    valB = pickerB.value;
+  }
+  const dataA = getPeriodData(type, valA);
+  const dataB = getPeriodData(type, valB);
+  const salesA = dataA.reduce((s,d)=>s+d['销售额'],0);
+  const salesB = dataB.reduce((s,d)=>s+d['销售额'],0);
+  const daysA = new Set(dataA.map(d=>d['日期'])).size || 1;
+  const daysB = new Set(dataB.map(d=>d['日期'])).size || 1;
+  const avgA = salesA / daysA;
+  const avgB = salesB / daysB;
+  const diff = salesA - salesB;
+  const diffPct = salesB > 0 ? ((diff/salesB)*100) : 0;
+
+  // Build picker control HTML for the non-custom case
+  let pickerAHTML, pickerBHTML;
+  if (type === 'custom') {
+    const aTo = document.getElementById('cmpPickerAto')?.value || DATA_MAX_DATE;
+    const bTo = document.getElementById('cmpPickerBto')?.value || DATA_MAX_DATE;
+    pickerAHTML = '<div style="display:flex;gap:6px;align-items:center"><input type="date" class="compare-select" id="cmpPickerA" value="'+(pickerA.value||'')+'" onchange="renderCompare()" style="flex:1"><span style="color:var(--text2);font-size:12px">至</span><input type="date" class="compare-select" id="cmpPickerAto" value="'+aTo+'" onchange="renderCompare()" style="flex:1"></div>';
+    pickerBHTML = '<div style="display:flex;gap:6px;align-items:center"><input type="date" class="compare-select" id="cmpPickerB" value="'+(pickerB.value||'')+'" onchange="renderCompare()" style="flex:1"><span style="color:var(--text2);font-size:12px">至</span><input type="date" class="compare-select" id="cmpPickerBto" value="'+bTo+'" onchange="renderCompare()" style="flex:1"></div>';
+  } else {
+    pickerAHTML = '<select class="compare-select" onchange="renderCompare()" id="cmpPickerA">'+getAvailablePeriods(type).map(p=>'<option value="'+p.value+'"'+(p.value===valA?' selected':'')+'>'+p.label+'</option>').join('')+'</select>';
+    pickerBHTML = '<select class="compare-select" onchange="renderCompare()" id="cmpPickerB">'+getAvailablePeriods(type).map(p=>'<option value="'+p.value+'"'+(p.value===valB?' selected':'')+'>'+p.label+'</option>').join('')+'</select>';
+  }
+
+  // Update comparison cards
+  document.getElementById('cmpCardA').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <div class="compare-label a">对比项 A</div>
+      <div style="flex:1;min-width:200px">${pickerAHTML}</div>
+    </div>
+    <div class="compare-kpis">
+      <div class="compare-kpi"><div class="lbl">总销售额</div><div class="val">${fmtMoney(salesA)}</div></div>
+      <div class="compare-kpi"><div class="lbl">日均</div><div class="val">${fmtMoney(avgA)}</div></div>
+    </div>
+  `;
+  document.getElementById('cmpCardB').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <div class="compare-label b">对比项 B</div>
+      <div style="flex:1;min-width:200px">${pickerBHTML}</div>
+    </div>
+    <div class="compare-kpis">
+      <div class="compare-kpi"><div class="lbl">总销售额</div><div class="val">${fmtMoney(salesB)}</div></div>
+      <div class="compare-kpi"><div class="lbl">日均</div><div class="val">${fmtMoney(avgB)}</div></div>
+    </div>
+  `;
+
+  // Diff
+  const up = diff >= 0;
+  document.getElementById('diffCard').innerHTML = `
+    <div class="diff-label">差额 (A - B)</div>
+    <div class="diff-value ${up?'up':'down'}">${up?'+':''}${fmtMoney(diff)}</div>
+    <div style="font-size:14px;color:var(--text2);margin-top:4px">
+      ${up?'增长':'下降'} ${Math.abs(diffPct).toFixed(1)}% · 
+      A日均 ${fmtMoney(avgA)} vs B日均 ${fmtMoney(avgB)}
+    </div>
+  `;
+
+  // Comparison charts - channel breakdown
+  const chanA = aggByChannel(dataA);
+  const chanB = aggByChannel(dataB);
+  const allChans = [...new Set([...chanA.map(c=>c.channel),...chanB.map(c=>c.channel)])];
+
+  function drawCmpChart(canvasId, chanData, color, totalS) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    const existing = canvasId==='cmpChartA'?cmpChartA:cmpChartB;
+    if (existing) existing.destroy();
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: chanData.map(c=>c.channel.length>8?c.channel.slice(0,8)+'…':c.channel),
+        datasets: [{ label:'销售额',data:chanData.map(c=>c.sales),backgroundColor:color+'CC',borderRadius:6,borderSkipped:false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false}, tooltip:{backgroundColor:'#1d1d1f',callbacks:{label:ctx=>'¥'+ctx.parsed.y.toLocaleString()}} },
+        scales: {
+          x: { grid:{display:false}, ticks:{font:{size:10},color:'#6e6e73',maxRotation:25} },
+          y: { grid:{color:'#f0f0f2'}, ticks:{font:{size:10},color:'#aeaeb2',callback:v=>(v/10000).toFixed(1)+'万'} }
+        }
+      }
+    });
+    if (canvasId==='cmpChartA') cmpChartA = chart; else cmpChartB = chart;
+  }
+
+  drawCmpChart('cmpChartA', chanA, '#0071e3', salesA);
+  drawCmpChart('cmpChartB', chanB, '#ff9500', salesB);
+}
+
+// ===== FILE UPLOAD =====
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+function showLoading(){document.getElementById('loading').classList.add('show')}
+function hideLoading(){document.getElementById('loading').classList.remove('show')}
+// Restore container from empty state (unhide cards, remove overlay)
+function restoreContainer() {
+  const ov = document.getElementById('emptyOverlay');
+  if (ov) ov.remove();
+  document.querySelectorAll('.container .card').forEach(c => c.style.display = '');
+}
+
+// Open the native file picker so the user can manually select an xlsx
+function triggerUpload() {
+  const inp = document.getElementById('fileInput');
+  if (inp) inp.click();
+}
+
+function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showLoading();
+  restoreContainer();
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet);
+      if (json.length===0) { hideLoading(); showToast('文件为空'); return; }
+      // Validate data quality before processing
+      const valMsg = validateUploadedData(json);
+      if (valMsg && !confirm('⚠️ 数据检测到问题：\n\n' + valMsg + '\n\n点击「确定」继续。')) { hideLoading(); return; }
+      const keys = Object.keys(json[0]);
+      const dateKey = keys.find(k=>k.includes('日期')||k.toLowerCase().includes('date'));
+      const chanKey = keys.find(k=>k.includes('渠道')&&!k.includes('细分'));
+      const subKey = keys.find(k=>k.includes('细分'));
+      const salesKey = keys.find(k=>k.includes('销售')||k.includes('额')||k.toLowerCase().includes('sales')||k.toLowerCase().includes('amount'));
+      if (!dateKey||!chanKey||!subKey||!salesKey) {
+        hideLoading(); showToast('文件格式不匹配，需要包含：日期、渠道、细分渠道、销售额 列'); return;
+      }
+      // Robust date parsing: use raw cell info + multiple format fallbacks
+      const headerRow = XLSX.utils.sheet_to_json(sheet, {header:1})[0];
+      const dateCol = headerRow.indexOf(dateKey);
+      allData = json.map((row, idx) => {
+        let d = '';
+        const cellAddr = XLSX.utils.encode_cell({r:idx+1, c:dateCol});
+        const cell = sheet[cellAddr];
+        const rawVal = row[dateKey];
+
+        if (cell) {
+          // Layer 1: Use XLSX formatted text (w) - most reliable for dates
+          if (cell.w && /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(cell.w)) {
+            const parts = cell.w.split(/[\/\-]/);
+            d = parts[0] + '-' + String(parts[1]).padStart(2,'0') + '-' + String(parts[2]).padStart(2,'0');
+          }
+          // Layer 2: Excel serial number (t:'n' with numeric value)
+          else if (cell.t === 'n' && typeof rawVal === 'number' && rawVal > 20000 && rawVal < 60000) {
+            const dt = new Date((rawVal - 25569) * 86400000);
+            d = fmtDate(dt);
+          }
+        }
+        // Layer 3: Fallback - try parsing the string value directly
+        if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          const s = String(rawVal||'');
+          if (/^\d{4}-\d{2}-\d{2}/.test(s)) { d = s.slice(0,10); }
+          else if (/^\d{5,6}$/.test(s)) { const dt=new Date((parseInt(s)-25569)*86400000); if(!isNaN(dt.getTime())) d=fmtDate(dt); }
+          else { const dt=new Date(s); if(!isNaN(dt.getTime())) d=fmtDate(dt); }
+        }
+        return {'日期':d.slice(0,10),'渠道':String(row[chanKey]||'').trim(),'细分渠道':String(row[subKey]||'').trim().replace(/\n/g,'').replace(/\r/g,''),'销售额':parseFloat(row[salesKey])||0};
+      }).filter(d=>d['销售额']>0&&/^\d{4}-\d{2}-\d{2}$/.test(d['日期']));
+
+      const udates = [...new Set(allData.map(d=>d['日期']))].sort();
+      document.getElementById('lastUpdate').textContent = '📂 手动更新 | 数据截至 '+udates[udates.length-1]+' | 共 '+allData.length+' 条';
+      document.getElementById('downloadBtn').disabled = false;
+
+      // Rebuild channel dropdowns
+      const uchan = [...new Set(allData.map(d=>d['渠道']))].sort();
+      const usub = [...new Set(allData.map(d=>d['细分渠道']))].sort();
+      let chOpts = '<option value="all">全部渠道</option>';
+      uchan.forEach(c=>{chOpts+='<option value="'+c+'">'+c+'</option>';});
+      document.getElementById('chanSelect').innerHTML = chOpts;
+      let subOpts = '<option value="all">全部细分渠道</option>';
+      usub.forEach(s=>{subOpts+='<option value="'+s+'">'+s+'</option>';});
+      document.getElementById('subChanSelect').innerHTML = subOpts;
+
+      // Reset filters
+      timeFilter='all'; chanFilter='all'; subChanFilter='all';
+      document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
+      document.querySelector('[data-filter="all"]').classList.add('active');
+      document.getElementById('chanSelect').value='all';
+      document.getElementById('subChanSelect').value='all';
+
+      // Rebuild comparison channel dropdowns too
+      let cmpChOpts = '<option value="all">全部渠道</option>';
+      uchan.forEach(c=>{cmpChOpts+='<option value="'+c+'">'+c+'</option>';});
+      document.getElementById('cmpChan').innerHTML = cmpChOpts;
+      document.getElementById('cmpSubChan').innerHTML = '<option value="all">全部细分渠道</option>';
+
+      destroyCharts();
+      renderAll();
+      hideLoading();
+      showToast('数据已更新！共 '+allData.length+' 条，'+udates.length+' 天');
+    } catch(err) {
+      hideLoading(); showToast('文件解析失败：'+err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function validateUploadedData(data) {
+  const issues = [];
+  if (!data || data.length === 0) return '文件为空或无法解析';
+  const keys = Object.keys(data[0]);
+  const hasDate = keys.some(k => k.includes('日期') || k.toLowerCase().includes('date'));
+  const hasChannel = keys.some(k => k.includes('渠道') && !k.includes('细分'));
+  const hasSub = keys.some(k => k.includes('细分'));
+  const hasSales = keys.some(k => k.includes('销售') || k.includes('额') || k.toLowerCase().includes('sales') || k.toLowerCase().includes('amount'));
+  if (!hasDate) issues.push('缺少「日期」列');
+  if (!hasChannel) issues.push('缺少「渠道」列');
+  if (!hasSub) issues.push('缺少「细分渠道」列');
+  if (!hasSales) issues.push('缺少「销售额」列');
+  // Check for date serial numbers or weird formats
+  const sampleVal = data[0][keys.find(k => k.includes('日期') || k.toLowerCase().includes('date')) || keys[0]];
+  const sampleStr = String(sampleVal || '');
+  if (sampleStr && !/^\d{4}-\d{2}-\d{2}/.test(sampleStr) && !/^\d{5,6}$/.test(sampleStr)) {
+    issues.push('日期格式异常（首行值: '+sampleStr.slice(0,20)+'）');
+  }
+  // Check for zero/negative sales
+  const salesKey = keys.find(k => k.includes('销售') || k.includes('额') || k.toLowerCase().includes('sales'));
+  if (salesKey) {
+    const validRows = data.filter(r => parseFloat(r[salesKey]) > 0);
+    if (validRows === 0) issues.push('所有行销售额为0或无效');
+    else if (validRows < data.length * 0.5) issues.push('超过50%的行销售额为0或无效（'+validRows+'/'+data.length+' 有效）');
+  }
+  return issues.length > 0 ? issues.join('；') : '';
+}
+
+// Drag & drop
+const dz = document.getElementById('dropZone');
+document.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('show')});
+document.addEventListener('dragleave',e=>{e.preventDefault();dz.classList.remove('show')});
+document.addEventListener('drop',e=>{
+  e.preventDefault(); dz.classList.remove('show');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const inp = document.getElementById('fileInput');
+    const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+    handleFileUpload(inp);
+  }
+});
+
+// Override onCmpChanChange to use the renamed function
+document.getElementById('cmpChan').onchange = onCmpChanChange;
+
+// ===== AUTO-LOAD: try to fetch 销售额统计表.xlsx from same directory =====
+async function autoLoadExcel() {
+  const AUTO_FILE = '销售额统计表.xlsx';
+  try {
+    showLoading();
+    const resp = await fetch(AUTO_FILE);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const buf = await resp.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet);
+    if (!json.length) throw new Error('empty');
+
+    const keys = Object.keys(json[0]);
+    const dateKey = keys.find(k=>k.includes('日期')||k.toLowerCase().includes('date'));
+    const chanKey = keys.find(k=>k.includes('渠道')&&!k.includes('细分'));
+    const subKey = keys.find(k=>k.includes('细分'));
+    const salesKey = keys.find(k=>k.includes('销售')||k.includes('额')||k.toLowerCase().includes('sales')||k.toLowerCase().includes('amount'));
+    if (!dateKey||!chanKey||!subKey||!salesKey) throw new Error('columns');
+
+    const headerRow = XLSX.utils.sheet_to_json(sheet, {header:1})[0];
+    const dateCol = headerRow.indexOf(dateKey);
+
+    const parsed = json.map((row, idx) => {
+      let d = '';
+      const cellAddr = XLSX.utils.encode_cell({r:idx+1, c:dateCol});
+      const cell = sheet[cellAddr];
+      const rawVal = row[dateKey];
+      if (cell) {
+        if (cell.w && /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(cell.w)) {
+          const parts = cell.w.split(/[\/\-]/);
+          d = parts[0] + '-' + String(parts[1]).padStart(2,'0') + '-' + String(parts[2]).padStart(2,'0');
+        } else if (cell.t === 'n' && typeof rawVal === 'number' && rawVal > 20000 && rawVal < 60000) {
+          const dt = new Date((rawVal - 25569) * 86400000);
+          d = fmtDate(dt);
+        }
+      }
+      if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        const s = String(rawVal||'');
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) d = s.slice(0,10);
+        else if (/^\d{5,6}$/.test(s)) { const dt=new Date((parseInt(s)-25569)*86400000); if(!isNaN(dt.getTime())) d=fmtDate(dt); }
+        else { const dt=new Date(s); if(!isNaN(dt.getTime())) d=fmtDate(dt); }
+      }
+      return {'日期':d.slice(0,10),'渠道':String(row[chanKey]||'').trim(),'细分渠道':String(row[subKey]||'').trim().replace(/\n/g,'').replace(/\r/g,''),'销售额':parseFloat(row[salesKey])||0};
+    }).filter(d=>d['销售额']>0&&/^\d{4}-\d{2}-\d{2}$/.test(d['日期']));
+
+    // Update ALL_SUBS and channel dropdowns dynamically
+    const uchan = [...new Set(parsed.map(d=>d['渠道']))].sort();
+    const usub = [...new Set(parsed.map(d=>d['细分渠道']))].sort();
+    let chOpts = '<option value="all">全部渠道</option>';
+    uchan.forEach(c=>{chOpts+='<option value="'+c+'">'+c+'</option>';});
+    document.getElementById('chanSelect').innerHTML = chOpts;
+    document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
+    let cmpChOpts = '<option value="all">全部渠道</option>';
+    uchan.forEach(c=>{cmpChOpts+='<option value="'+c+'">'+c+'</option>';});
+    document.getElementById('cmpChan').innerHTML = cmpChOpts;
+
+    allData = parsed;
+    document.getElementById('downloadBtn').disabled = false;
+    const udates = [...new Set(parsed.map(d=>d['日期']))].sort();
+    document.getElementById('lastUpdate').textContent = '📂 自动加载：销售额统计表.xlsx | 数据截至 '+udates[udates.length-1]+' | 共 '+parsed.length+' 条';
+
+    restoreContainer();
+    destroyCharts();
+    renderAll();
+    hideLoading();
+    console.log('[AutoLoad] ✅ Loaded '+parsed.length+' rows from '+AUTO_FILE);
+  } catch(e) {
+    hideLoading();
+    console.log('[AutoLoad] ⚠️ Cannot auto-load '+AUTO_FILE+': '+e.message+' — falling back to embedded data');
+    // Fallback to embedded RAW_DATA
+    if (RAW_DATA.length > 0) {
+      allData = JSON.parse(JSON.stringify(RAW_DATA));
+      restoreContainer();
+      renderAll();
+    } else {
+      document.getElementById('lastUpdate').textContent = '暂无数据 — 请点击右上角「上传表格手动更新」选择 xlsx 文件，或将 销售额统计表.xlsx 放在同目录下';
+      const container = document.querySelector('.container');
+      if (container) {
+        container.insertAdjacentHTML('beforeend', '<div id="emptyOverlay" style="grid-column:1/-1;text-align:center;padding:120px 20px;color:var(--text3)"><svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom:16px;opacity:.4"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg><p style="font-size:18px;margin-bottom:8px;color:var(--text2)">暂无数据</p><p style="font-size:14px">将「销售额统计表.xlsx」放在看板同目录下即可自动加载<br>或点击右上角「上传表格手动更新」手动选择文件</p></div>');
+        container.querySelectorAll('.card').forEach(c => c.style.display = 'none');
+      }
+    }
+  }
+}
+
+// ===== INIT =====
+// Try Feishu first, fallback to local Excel
+refreshFromFeishu().catch(() => {
+  console.log('[Init] Feishu unavailable, trying local Excel...');
+  autoLoadExcel();
+});
+</script>
+</body>
+</html>
