@@ -196,17 +196,9 @@ th,td{padding:6px 8px;font-size:12px}
 <div class="header-left"><div class="logo">九峰牧场<span>·</span>数据看板</div><div class="badge">BETA</div></div>
 <div class="header-right">
 <span class="last-update" id="lastUpdate">📂 数据来源：用户上传 xlsx | 请点击右侧「上传表格手动更新」选择文件</span>
-<button class="refresh-btn" onclick="refreshFromFeishu()" id="refreshBtn" title="从飞书在线表格刷新最新数据">
+<button class="refresh-btn" onclick="refreshFromFeishu()" id="refreshBtn" title="从飞书在线表格刷新最新数据" style="display:none">
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
 刷新数据</button>
-<button class="upload-btn" onclick="triggerUpload()" id="syncBtn" title="上传 xlsx 表格手动更新数据">
-<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-上传表格手动更新</button>
-<button class="download-btn" onclick="downloadReport()" id="downloadBtn" title="生成内嵌最新数据的正式报告并下载" disabled>
-<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-下载报告</button>
-
-<input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(this)">
 </div></div></div>
 <div class="drop-zone" id="dropZone"><div class="drop-zone-text">释放文件以更新数据</div></div>
 <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
@@ -1536,8 +1528,17 @@ async function autoLoadExcel() {
   }
 }
 
+// ===== ADMIN CHECK =====
+// 访问 ?admin=你的密码 才能看到刷新按钮
+const ADMIN_PASSWORD = 'jiufeng2026';
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('admin') === ADMIN_PASSWORD) {
+  const rb = document.getElementById('refreshBtn');
+  if (rb) rb.style.display = '';
+  console.log('[Admin] ✅ Authenticated');
+}
+
 // ===== INIT =====
-// Try Feishu first, fallback to local Excel
 refreshFromFeishu().catch(() => {
   console.log('[Init] Feishu unavailable, trying local Excel...');
   autoLoadExcel();
