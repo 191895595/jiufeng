@@ -917,37 +917,131 @@ function downloadReport() {
 
 // ===== REFRESH FROM FEISHU =====
 const DATA_URL = 'data.json';
+let refreshTimer = null;
 
 function refreshFromFeishu(silent) {
   const btn = document.getElementById('refreshBtn');
   if (btn && btn.classList.contains('loading')) return Promise.reject('already loading');
   if (btn) btn.classList.add('loading');
-  showLoading();
   restoreContainer();
 
+  // 先读当前数据
   return fetch(DATA_URL + '?t=' + Date.now())
     .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(data => {
       if (data.error) throw new Error(data.error);
       if (!data.records || data.records.length === 0) throw new Error('无数据');
-      loadDataToPage(data, silent);
-      hideLoading();
-      if (btn) btn.classList.remove('loading');
-      // 检查数据新鲜度，超过6分钟提示
-      if (!silent && data.updated_at) {
-        const dataTime = new Date(data.updated_at.replace(' ','T')).getTime();
-        const ageMin = Math.round((Date.now() - dataTime) / 60000);
-        if (ageMin > 6) {
-          showToast('⚠️ 数据已 '+ageMin+' 分钟未更新，Actions 每5分钟自动同步，请稍后再试');
-        }
+
+      // 检查新鲜度
+      let dataAge = 0;
+      if (data.updated_at) {
+        dataAge = Math.round((Date.now() - new Date(data.updated_at.replace(' ','T')).getTime()) / 60000);
       }
+
+      if (dataAge <= 5) {
+        // 数据够新，直接加载
+        loadDataToPage(data, silent);
+        if (btn) btn.classList.remove('loading');
+        if (!silent) showToast('✅ 数据已刷新！');
+        return;
+      }
+
+      // 数据不够新，显示进度条并等待 Actions 更新
+      if (!silent) showRefreshProgress(data.updated_at);
+      const prevUpdated = data.updated_at;
+      return waitForDataUpdate(prevUpdated).then(freshData => {
+        hideRefreshProgress();
+        loadDataToPage(freshData, silent);
+        if (btn) btn.classList.remove('loading');
+        if (!silent) showToast('✅ 最新数据已同步！');
+      });
     })
     .catch(err => {
-      hideLoading();
+      hideRefreshProgress();
       if (btn) btn.classList.remove('loading');
       if (!silent) showToast('❌ 刷新失败：'+err.message+' — 请稍后重试');
       console.error('Refresh error:', err);
     });
+}
+
+function showRefreshProgress(lastUpdate) {
+  // 创建进度条覆盖层
+  let overlay = document.getElementById('refreshOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'refreshOverlay';
+    overlay.innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px">🔄 正在等待最新数据</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px" id="refreshStatus">Actions 每5分钟自动从飞书同步</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:20px" id="refreshTimer">上次更新：${lastUpdate} | 已等待 0 秒</div>
+        <div style="max-width:300px;margin:0 auto;height:6px;background:#e5e5ea;border-radius:3px;overflow:hidden">
+          <div id="refreshBar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>
+        </div>
+        <div style="margin-top:16px">
+          <button onclick="cancelRefresh()" style="padding:6px 16px;border-radius:16px;border:1px solid var(--red);background:#fff;color:var(--red);font-size:13px;cursor:pointer;font-family:inherit">取消等待</button>
+        </div>
+      </div>`;
+    document.querySelector('.container').prepend(overlay);
+  }
+  // 启动计时器
+  let elapsed = 0;
+  const maxWait = 360; // 最多等6分钟
+  refreshTimer = setInterval(() => {
+    elapsed++;
+    const pct = Math.min((elapsed / maxWait) * 100, 95);
+    document.getElementById('refreshBar').style.width = pct + '%';
+    document.getElementById('refreshTimer').textContent = '上次更新：' + lastUpdate + ' | 已等待 ' + elapsed + ' 秒';
+    if (elapsed % 30 === 0) {
+      document.getElementById('refreshStatus').textContent = 'Actions 每5分钟自动从飞书同步... 等待中';
+    }
+  }, 1000);
+  window._refreshCancelled = false;
+}
+
+function hideRefreshProgress() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  const overlay = document.getElementById('refreshOverlay');
+  if (overlay) overlay.remove();
+}
+
+function cancelRefresh() {
+  window._refreshCancelled = true;
+  hideRefreshProgress();
+  const btn = document.getElementById('refreshBtn');
+  if (btn) btn.classList.remove('loading');
+  showToast('已取消等待，当前显示缓存数据');
+}
+
+function waitForDataUpdate(prevUpdated) {
+  const maxWait = 360000; // 6分钟
+  const interval = 5000;   // 每5秒检查
+  const start = Date.now();
+
+  return new Promise((resolve, reject) => {
+    function poll() {
+      if (window._refreshCancelled) {
+        return fetch(DATA_URL + '?t=' + Date.now()).then(r => r.json()).then(resolve).catch(reject);
+      }
+      const elapsed = Date.now() - start;
+      if (elapsed > maxWait) {
+        // 超时，用当前数据
+        fetch(DATA_URL + '?t=' + Date.now()).then(r => r.json()).then(resolve).catch(reject);
+        return;
+      }
+      fetch(DATA_URL + '?t=' + Date.now())
+        .then(r => r.json())
+        .then(data => {
+          if (data.updated_at && data.updated_at !== prevUpdated) {
+            resolve(data); // 数据已更新！
+            return;
+          }
+          setTimeout(poll, interval);
+        })
+        .catch(() => setTimeout(poll, interval));
+    }
+    poll();
+  });
 }
 
 function loadDataToPage(data, silent) {
