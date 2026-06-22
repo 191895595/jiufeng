@@ -959,8 +959,9 @@ function refreshFromFeishu(silent) {
 
   // 先读当前数据
   return fetch(DATA_URL + '?t=' + Date.now())
-    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(r => { console.log('[DEBUG] fetch OK, status:', r.status); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(data => {
+      console.log('[DEBUG] data loaded, records:', data.record_count);
       if (data.error) throw new Error(data.error);
       if (!data.records || data.records.length === 0) throw new Error('无数据');
 
@@ -969,22 +970,26 @@ function refreshFromFeishu(silent) {
       if (data.updated_at) {
         dataAge = Math.round((Date.now() - new Date(data.updated_at.replace(' ','T')).getTime()) / 60000);
       }
+      console.log('[DEBUG] dataAge:', dataAge, 'min');
 
-      if (dataAge <= 5) {
-        // 数据够新，直接加载
-        loadDataToPage(data, silent);
-        if (!silent) showToast('✅ 数据已刷新！');
-        return;
+      // 始终先加载当前数据，再判断是否需要后台等待更新
+      loadDataToPage(data, silent);
+      
+      if (dataAge > 5 && !silent) {
+        // 数据不够新，后台等待并提示
+        showRefreshProgress(data.updated_at);
+        const prevUpdated = data.updated_at;
+        waitForDataUpdate(prevUpdated).then(freshData => {
+          hideRefreshProgress();
+          loadDataToPage(freshData, silent);
+          showToast('✅ 最新数据已同步！');
+        }).catch(() => {
+          hideRefreshProgress();
+        });
+      } else if (!silent) {
+        showToast('✅ 数据已刷新！');
       }
-
-      // 数据不够新，显示进度条并等待 Actions 更新
-      if (!silent) showRefreshProgress(data.updated_at);
-      const prevUpdated = data.updated_at;
-      return waitForDataUpdate(prevUpdated).then(freshData => {
-        hideRefreshProgress();
-        loadDataToPage(freshData, silent);
-        if (!silent) showToast('✅ 最新数据已同步！');
-      });
+      return;
     })
     .catch(err => {
       hideRefreshProgress();
@@ -1110,6 +1115,7 @@ function loadDataToPage(data, silent) {
     renderAll();
   } catch(e) {
     console.error('renderAll error:', e);
+    document.getElementById('lastUpdate').textContent = '⚠️ 渲染错误: ' + (e.message || e);
     throw e;
   }
   if (!silent) showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
