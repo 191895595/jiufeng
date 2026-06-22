@@ -925,45 +925,107 @@ function refreshFromFeishu(silent) {
   showLoading();
   restoreContainer();
 
-  return fetch(DATA_URL)
+  // Actions 每2分钟自动拉取，这里先读一次，如果数据不够新（>3分钟）就轮询等待
+  return fetch(DATA_URL + '?t=' + Date.now())
     .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(data => {
-      if (data.error) throw new Error(data.error);
-      if (!data.records || data.records.length === 0) throw new Error('无数据');
-
-      allData = data.records;
-
-      // Rebuild dropdowns from fresh data
-      const uchan = [...new Set(allData.map(d => d['渠道']))].sort();
-      const usub = [...new Set(allData.map(d => d['细分渠道']))].sort();
-      document.getElementById('chanSelect').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
-      document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
-      document.getElementById('cmpChan').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
-      document.getElementById('cmpSubChan').innerHTML = '<option value="all">全部细分渠道</option>';
-
-      // Reset filters
-      timeFilter='all'; chanFilter='all'; subChanFilter='all';
-      document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
-      const allPill = document.querySelector('[data-filter="all"]');
-      if (allPill) allPill.classList.add('active');
-      const cs = document.getElementById('chanSelect'); if (cs) cs.value='all';
-      const ss = document.getElementById('subChanSelect'); if (ss) ss.value='all';
-
-      document.getElementById('lastUpdate').textContent = '🔄 飞书在线表格 | 数据截至 '+data.date_range.split(' ~ ')[1]+' | 共 '+data.record_count+' 条 | 刷新时间 '+data.updated_at;
-      const db = document.getElementById('downloadBtn'); if (db) db.disabled = false;
-
-      destroyCharts();
-      renderAll();
-      hideLoading();
-      if (btn) btn.classList.remove('loading');
-      if (!silent) showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
+      // 检查数据新鲜度
+      if (data.updated_at) {
+        const dataTime = new Date(data.updated_at.replace(' ','T')).getTime();
+        const age = Date.now() - dataTime;
+        if (age < 180000) { // 3分钟内，直接使用
+          loadDataToPage(data, silent);
+          hideLoading();
+          if (btn) btn.classList.remove('loading');
+          return;
+        }
+      }
+      // 数据不够新，轮询等待 Actions 更新（最多等2.5分钟）
+      if (!silent) showToast('⏳ 等待最新数据，Actions 每2分钟自动拉取...');
+      return waitForFreshData().then(freshData => {
+        loadDataToPage(freshData, silent);
+        hideLoading();
+        if (btn) btn.classList.remove('loading');
+      });
     })
     .catch(err => {
       hideLoading();
       if (btn) btn.classList.remove('loading');
       if (!silent) showToast('❌ 刷新失败：'+err.message+' — 请稍后重试');
-      console.error('Feishu refresh error:', err);
+      console.error('Refresh error:', err);
     });
+}
+
+function waitForFreshData() {
+  // 轮询 data.json，最多等 60 秒
+  const maxWait = 60000;
+  const interval = 3000;
+  const start = Date.now();
+  
+  return new Promise((resolve, reject) => {
+    function poll() {
+      fetch(DATA_URL + '?t=' + Date.now())
+        .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(data => {
+          const age = Date.now() - start;
+          // 如果数据是最近 2 分钟内更新的，认为已刷新
+          if (data.updated_at) {
+            const updateTime = new Date(data.updated_at.replace(' ','T')).getTime();
+            const dataAge = Date.now() - updateTime;
+            if (dataAge < 120000 || age > maxWait) {
+              resolve(data);
+              return;
+            }
+          }
+          if (age > maxWait) {
+            resolve(data); // 超时，用现有数据
+            return;
+          }
+          setTimeout(poll, interval);
+        })
+        .catch(err => {
+          if (Date.now() - start > maxWait) reject(err);
+          else setTimeout(poll, interval);
+        });
+    }
+    poll();
+  });
+}
+
+function loadDataToPage(data, silent) {
+      if (data.error) throw new Error(data.error);
+      if (!data.records || data.records.length === 0) throw new Error('无数据');
+
+      allData = data.records;
+
+function loadDataToPage(data, silent) {
+  if (data.error) throw new Error(data.error);
+  if (!data.records || data.records.length === 0) throw new Error('无数据');
+
+  allData = data.records;
+
+  // Rebuild dropdowns from fresh data
+  const uchan = [...new Set(allData.map(d => d['渠道']))].sort();
+  const usub = [...new Set(allData.map(d => d['细分渠道']))].sort();
+  document.getElementById('chanSelect').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+  document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
+  document.getElementById('cmpChan').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+  document.getElementById('cmpSubChan').innerHTML = '<option value="all">全部细分渠道</option>';
+
+  // Reset filters
+  timeFilter='all'; chanFilter='all'; subChanFilter='all';
+  document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
+  const allPill = document.querySelector('[data-filter="all"]');
+  if (allPill) allPill.classList.add('active');
+  const cs = document.getElementById('chanSelect'); if (cs) cs.value='all';
+  const ss = document.getElementById('subChanSelect'); if (ss) ss.value='all';
+
+  document.getElementById('lastUpdate').textContent = '🔄 飞书在线表格 | 数据截至 '+data.date_range.split(' ~ ')[1]+' | 共 '+data.record_count+' 条 | 刷新时间 '+data.updated_at;
+  const db = document.getElementById('downloadBtn'); if (db) db.disabled = false;
+
+  destroyCharts();
+  renderAll();
+  if (!silent) showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
 }
 
 // ===== FILTERS =====
