@@ -918,10 +918,10 @@ function downloadReport() {
 // ===== REFRESH FROM FEISHU (via GitHub Pages data.json) =====
 const DATA_URL = 'data.json';
 
-function refreshFromFeishu() {
+function refreshFromFeishu(silent) {
   const btn = document.getElementById('refreshBtn');
-  if (btn.classList.contains('loading')) return Promise.reject('already loading');
-  btn.classList.add('loading');
+  if (btn && btn.classList.contains('loading')) return Promise.reject('already loading');
+  if (btn) btn.classList.add('loading');
   showLoading();
   restoreContainer();
 
@@ -944,23 +944,24 @@ function refreshFromFeishu() {
       // Reset filters
       timeFilter='all'; chanFilter='all'; subChanFilter='all';
       document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
-      document.querySelector('[data-filter="all"]').classList.add('active');
-      document.getElementById('chanSelect').value='all';
-      document.getElementById('subChanSelect').value='all';
+      const allPill = document.querySelector('[data-filter="all"]');
+      if (allPill) allPill.classList.add('active');
+      const cs = document.getElementById('chanSelect'); if (cs) cs.value='all';
+      const ss = document.getElementById('subChanSelect'); if (ss) ss.value='all';
 
       document.getElementById('lastUpdate').textContent = '🔄 飞书在线表格 | 数据截至 '+data.date_range.split(' ~ ')[1]+' | 共 '+data.record_count+' 条 | 刷新时间 '+data.updated_at;
-      document.getElementById('downloadBtn').disabled = false;
+      const db = document.getElementById('downloadBtn'); if (db) db.disabled = false;
 
       destroyCharts();
       renderAll();
       hideLoading();
-      btn.classList.remove('loading');
-      showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
+      if (btn) btn.classList.remove('loading');
+      if (!silent) showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
     })
     .catch(err => {
       hideLoading();
-      btn.classList.remove('loading');
-      showToast('❌ 刷新失败：'+err.message+' — 请检查网络或使用上传备选');
+      if (btn) btn.classList.remove('loading');
+      if (!silent) showToast('❌ 刷新失败：'+err.message+' — 请稍后重试');
       console.error('Feishu refresh error:', err);
     });
 }
@@ -1539,9 +1540,11 @@ if (urlParams.get('admin') === ADMIN_PASSWORD) {
 }
 
 // ===== INIT =====
-refreshFromFeishu().catch(() => {
-  console.log('[Init] Feishu unavailable, trying local Excel...');
-  autoLoadExcel();
+refreshFromFeishu(true).catch((err) => {
+  console.log('[Init] Data load failed:', err.message);
+  // Show empty state with helpful message
+  document.getElementById('lastUpdate').textContent = '⚠️ 数据加载失败，请稍后刷新页面或联系管理员';
+  hideLoading();
 });
 </script>
 </body>
