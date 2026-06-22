@@ -34,6 +34,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .refresh-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--purple);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;transition:var(--t);font-family:inherit}
 .refresh-btn:hover{background:#9b30d6;transform:scale(1.02)}
 .refresh-btn:active{transform:scale(.98)}
+.login-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;transition:var(--t);font-family:inherit;padding:0}
+.login-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.logout-btn{padding:6px 14px;border-radius:16px;border:1px solid var(--red);background:#fff;color:var(--red);font-size:13px;cursor:pointer;transition:var(--t);font-family:inherit}
+.logout-btn:hover{background:var(--red);color:#fff}
+.login-modal{position:fixed;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center}
+.login-card{background:#fff;border-radius:20px;padding:32px 28px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,0.15);text-align:center}
+.login-title{font-size:18px;font-weight:600;margin-bottom:20px;color:var(--text)}
+.login-input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:15px;margin-bottom:12px;font-family:inherit;outline:none;transition:var(--t)}
+.login-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.12)}
+.login-error{font-size:13px;color:var(--red);margin-bottom:8px;min-height:20px}
+.login-actions{display:flex;gap:10px}
+.login-submit{flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:var(--t)}
+.login-submit:hover{background:#0077ed}
+.login-cancel{flex:1;padding:10px;background:#f5f5f7;color:var(--text2);border:none;border-radius:12px;font-size:15px;cursor:pointer;font-family:inherit;transition:var(--t)}
+.login-cancel:hover{background:#e5e5ea}
 
 
 
@@ -198,10 +213,28 @@ th,td{padding:6px 8px;font-size:12px}
 <button class="refresh-btn" onclick="refreshFromFeishu()" id="refreshBtn" title="从飞书在线表格刷新最新数据" style="display:none">
 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
 刷新数据</button>
+<button class="login-btn" onclick="showLogin()" id="loginBtn" title="管理员登录">
+<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+</button>
+<button class="logout-btn" onclick="doLogout()" id="logoutBtn" title="退出管理" style="display:none">退出</button>
 </div></div></div>
 <div class="drop-zone" id="dropZone"><div class="drop-zone-text">释放文件以更新数据</div></div>
 <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
 <div class="toast" id="toast"></div>
+
+<!-- 登录弹窗 -->
+<div class="login-modal" id="loginModal" style="display:none">
+  <div class="login-card">
+    <div class="login-title">🔐 管理员登录</div>
+    <input type="text" id="loginAccount" placeholder="账号" class="login-input" autocomplete="off">
+    <input type="password" id="loginPassword" placeholder="密码" class="login-input" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-error" id="loginError"></div>
+    <div class="login-actions">
+      <button class="login-submit" onclick="doLogin()">登 录</button>
+      <button class="login-cancel" onclick="hideLogin()">取消</button>
+    </div>
+  </div>
+</div>
 
 <div class="container">
 <!-- Time filters -->
@@ -1645,15 +1678,61 @@ async function autoLoadExcel() {
   }
 }
 
-// ===== ADMIN CHECK =====
-// 访问 ?admin=你的密码 才能看到刷新按钮
-const ADMIN_PASSWORD = 'jiufeng2026';
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('admin') === ADMIN_PASSWORD) {
-  const rb = document.getElementById('refreshBtn');
-  if (rb) rb.style.display = '';
-  console.log('[Admin] ✅ Authenticated');
+// ===== ADMIN LOGIN =====
+const ADMIN_ACCOUNT = '18027142036';
+const ADMIN_PASSWORD = '18027142036';
+let isAdmin = false;
+
+// 检查是否已登录（sessionStorage 记住状态）
+if (sessionStorage.getItem('jiufeng_admin') === '1') {
+  enableAdminMode();
 }
+
+function showLogin() {
+  document.getElementById('loginModal').style.display = 'flex';
+  document.getElementById('loginAccount').focus();
+  document.getElementById('loginError').textContent = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+function hideLogin() {
+  document.getElementById('loginModal').style.display = 'none';
+}
+
+function doLogin() {
+  const account = document.getElementById('loginAccount').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+  if (account === ADMIN_ACCOUNT && password === ADMIN_PASSWORD) {
+    sessionStorage.setItem('jiufeng_admin', '1');
+    hideLogin();
+    enableAdminMode();
+    showToast('✅ 管理员已登录');
+  } else {
+    document.getElementById('loginError').textContent = '账号或密码错误';
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('jiufeng_admin');
+  isAdmin = false;
+  document.getElementById('refreshBtn').style.display = 'none';
+  document.getElementById('loginBtn').style.display = '';
+  document.getElementById('logoutBtn').style.display = 'none';
+  showToast('已退出管理');
+}
+
+function enableAdminMode() {
+  isAdmin = true;
+  document.getElementById('refreshBtn').style.display = '';
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = '';
+}
+
+// 点击弹窗外部关闭
+document.addEventListener('click', function(e) {
+  const modal = document.getElementById('loginModal');
+  if (e.target === modal) hideLogin();
+});
 
 // ===== INIT =====
 refreshFromFeishu(true).catch((err) => {
