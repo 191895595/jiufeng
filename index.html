@@ -915,8 +915,9 @@ function downloadReport() {
   showToast('报告已下载！文件内嵌 ' + allData.length + ' 条最新数据');
 }
 
-// ===== REFRESH FROM FEISHU (via GitHub Pages data.json) =====
+// ===== REFRESH FROM FEISHU =====
 const DATA_URL = 'data.json';
+const ACTIONS_DISPATCH = 'https://api.github.com/repos/191895595/jiufeng/actions/workflows/deploy.yml/dispatches';
 
 function refreshFromFeishu(silent) {
   const btn = document.getElementById('refreshBtn');
@@ -925,28 +926,26 @@ function refreshFromFeishu(silent) {
   showLoading();
   restoreContainer();
 
-  // Actions 每2分钟自动拉取，这里先读一次，如果数据不够新（>3分钟）就轮询等待
+  // 记录刷新前的 data.json 更新时间，用于判断 Actions 是否跑完
+  let prevUpdated = '';
   return fetch(DATA_URL + '?t=' + Date.now())
-    .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(data => {
-      // 检查数据新鲜度
-      if (data.updated_at) {
-        const dataTime = new Date(data.updated_at.replace(' ','T')).getTime();
-        const age = Date.now() - dataTime;
-        if (age < 360000) { // 6分钟内，直接使用
-          loadDataToPage(data, silent);
-          hideLoading();
-          if (btn) btn.classList.remove('loading');
-          return;
-        }
-      }
-      // 数据不够新，轮询等待 Actions 更新（最多等2.5分钟）
-      if (!silent) showToast('⏳ 等待最新数据，Actions 每5分钟自动拉取...');
-      return waitForFreshData().then(freshData => {
-        loadDataToPage(freshData, silent);
-        hideLoading();
-        if (btn) btn.classList.remove('loading');
+    .then(r => r.json())
+    .then(data => { if (data.updated_at) prevUpdated = data.updated_at; })
+    .catch(() => {})
+    .then(() => {
+      // 触发 GitHub Actions
+      if (!silent) showToast('🔄 正在从飞书拉取最新数据，约40秒...');
+      return fetch(ACTIONS_DISPATCH, {
+        method: 'POST',
+        headers: { 'Accept': 'application/vnd.github+json' },
+        body: JSON.stringify({ ref: 'main' })
       });
+    })
+    .then(() => waitForActions(prevUpdated))
+    .then(freshData => {
+      loadDataToPage(freshData, silent);
+      hideLoading();
+      if (btn) btn.classList.remove('loading');
     })
     .catch(err => {
       hideLoading();
@@ -956,19 +955,36 @@ function refreshFromFeishu(silent) {
     });
 }
 
-function waitForFreshData() {
-  // 轮询 data.json，最多等 60 秒
-  const maxWait = 60000;
-  const interval = 3000;
+function waitForActions(prevUpdated) {
+  const maxWait = 90000;  // 最多等90秒
+  const interval = 4000;  // 每4秒检查一次
   const start = Date.now();
-  
+
   return new Promise((resolve, reject) => {
     function poll() {
       fetch(DATA_URL + '?t=' + Date.now())
-        .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(r => r.json())
         .then(data => {
-          const age = Date.now() - start;
-          // 如果数据是最近 2 分钟内更新的，认为已刷新
+          const elapsed = Date.now() - start;
+          // data.json 更新了，或者超时
+          if (data.updated_at && data.updated_at !== prevUpdated) {
+            resolve(data);
+            return;
+          }
+          if (elapsed > maxWait) {
+            resolve(data); // 超时，用现有数据
+            return;
+          }
+          setTimeout(poll, interval);
+        })
+        .catch(err => {
+          if (Date.now() - start > maxWait) reject(err);
+          else setTimeout(poll, interval);
+        });
+    }
+    poll();
+  });
+}
           if (data.updated_at) {
             const updateTime = new Date(data.updated_at.replace(' ','T')).getTime();
             const dataAge = Date.now() - updateTime;
@@ -991,12 +1007,6 @@ function waitForFreshData() {
     poll();
   });
 }
-
-function loadDataToPage(data, silent) {
-      if (data.error) throw new Error(data.error);
-      if (!data.records || data.records.length === 0) throw new Error('无数据');
-
-      allData = data.records;
 
 function loadDataToPage(data, silent) {
   if (data.error) throw new Error(data.error);
