@@ -34,7 +34,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .refresh-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--purple);color:#fff;border:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;transition:var(--t);font-family:inherit}
 .refresh-btn:hover{background:#9b30d6;transform:scale(1.02)}
 .refresh-btn:active{transform:scale(.98)}
-.refresh-btn.loading{animation:spin 1s linear infinite;pointer-events:none;opacity:.7}
 
 
 
@@ -921,8 +920,8 @@ let refreshTimer = null;
 
 function refreshFromFeishu(silent) {
   const btn = document.getElementById('refreshBtn');
-  if (btn && btn.classList.contains('loading')) return Promise.reject('already loading');
-  if (btn) btn.classList.add('loading');
+  if (btn && btn.dataset.loading === '1') return Promise.reject('already loading');
+  if (btn) btn.dataset.loading = '1';
   restoreContainer();
 
   // 先读当前数据
@@ -941,7 +940,6 @@ function refreshFromFeishu(silent) {
       if (dataAge <= 5) {
         // 数据够新，直接加载
         loadDataToPage(data, silent);
-        if (btn) btn.classList.remove('loading');
         if (!silent) showToast('✅ 数据已刷新！');
         return;
       }
@@ -952,15 +950,16 @@ function refreshFromFeishu(silent) {
       return waitForDataUpdate(prevUpdated).then(freshData => {
         hideRefreshProgress();
         loadDataToPage(freshData, silent);
-        if (btn) btn.classList.remove('loading');
         if (!silent) showToast('✅ 最新数据已同步！');
       });
     })
     .catch(err => {
       hideRefreshProgress();
-      if (btn) btn.classList.remove('loading');
       if (!silent) showToast('❌ 刷新失败：'+err.message+' — 请稍后重试');
       console.error('Refresh error:', err);
+    })
+    .finally(() => {
+      if (btn) btn.dataset.loading = '0';
     });
 }
 
