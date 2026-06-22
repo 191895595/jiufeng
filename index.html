@@ -341,8 +341,8 @@ const RAW_DATA = [];
 const CH_COLORS = ['#0071e3','#34c759','#ff9500','#af52de','#ff2d55','#5ac8fa','#ffd60a','#bf5af2','#ff6482','#32d74b'];
 
 let allData = RAW_DATA;
-const DATA_MAX_DATE = (()=>{if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']>a?b['日期']:a,allData[0]['日期']);})();
-const DATA_MIN_DATE = (()=>{if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']<a?b['日期']:a,allData[0]['日期']);})();
+function getDataMaxDate(){if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']>a?b['日期']:a,allData[0]['日期']);}
+function getDataMinDate(){if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']<a?b['日期']:a,allData[0]['日期']);}
 let timeFilter = 'all';
 let chanFilter = 'all';
 let subChanFilter = 'all';
@@ -369,7 +369,7 @@ function parseDate(s){const p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
 function getWeekLabel(d){const m=getMonday(new Date(d));const sun=new Date(m);sun.setDate(sun.getDate()+6);return fmtDate(m)+' ~ '+fmtDate(sun)}
 
 function getDateRange(filter) {
-  const today = DATA_MAX_DATE ? new Date(DATA_MAX_DATE) : new Date(); today.setHours(0,0,0,0);
+  const today = getDataMaxDate() ? new Date(getDataMaxDate()) : new Date(); today.setHours(0,0,0,0);
   const t = fmtDate(today);
   switch(filter) {
     case 'today': return {from:t,to:t};
@@ -458,7 +458,7 @@ function aggByDate(data, gran) {
       const m = d['日期'].slice(0,7);
       map[m] = (map[m]||0) + d['销售额'];
     });
-    const curYear = DATA_MAX_DATE ? DATA_MAX_DATE.slice(0,4) : new Date().getFullYear().toString();
+    const curYear = getDataMaxDate() ? getDataMaxDate().slice(0,4) : new Date().getFullYear().toString();
     return Object.entries(map).map(([m,s]) => ({label:m,sales:s})).sort((a,b) => a.label.localeCompare(b.label)).filter(x => x.label.startsWith(curYear));
   }
 }
@@ -665,7 +665,7 @@ function renderAll() {
     // Build previous period data (same channel, previous equivalent time window)
     let prevRange = null;
     if (timeFilter === 'all') {
-      const d = new Date(DATA_MAX_DATE); d.setHours(0,0,0,0);
+      const d = new Date(getDataMaxDate()); d.setHours(0,0,0,0);
       const cy = d.getFullYear(), cm = d.getMonth()+1;
       const thisMonth = cy+'-'+String(cm).padStart(2,'0');
       const py = cm===1 ? cy-1 : cy, pm = cm===1 ? 12 : cm-1;
@@ -1073,7 +1073,12 @@ function loadDataToPage(data, silent) {
   const db = document.getElementById('downloadBtn'); if (db) db.disabled = false;
 
   destroyCharts();
-  renderAll();
+  try {
+    renderAll();
+  } catch(e) {
+    console.error('renderAll error:', e);
+    throw e;
+  }
   if (!silent) showToast('✅ 数据已刷新！'+data.record_count+' 条，销售额 ¥'+(data.total_sales/10000).toFixed(2)+'万');
 }
 
@@ -1097,24 +1102,24 @@ function setTimeFilter(filter, btn) {
 
 function initCustomRange(){
   const f=document.getElementById('crFrom'), t=document.getElementById('crTo');
-  if(DATA_MIN_DATE) f.min = DATA_MIN_DATE;
-  if(DATA_MAX_DATE) t.max = DATA_MAX_DATE;
-  if(!f.value && DATA_MAX_DATE){const d=new Date(DATA_MAX_DATE);d.setDate(d.getDate()-6);f.value=fmtDate(d);t.value=DATA_MAX_DATE;}
+  if(getDataMinDate()) f.min = getDataMinDate();
+  if(getDataMaxDate()) t.max = getDataMaxDate();
+  if(!f.value && getDataMaxDate()){const d=new Date(getDataMaxDate());d.setDate(d.getDate()-6);f.value=fmtDate(d);t.value=getDataMaxDate();}
 }
 function initCustomDay(){
   const e=document.getElementById('crDay');
-  if(DATA_MIN_DATE) e.min = DATA_MIN_DATE;
-  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE; if(!e.value) e.value = DATA_MAX_DATE;}
+  if(getDataMinDate()) e.min = getDataMinDate();
+  if(getDataMaxDate()){e.max = getDataMaxDate(); if(!e.value) e.value = getDataMaxDate();}
 }
 function initCustomWeek(){
   const e=document.getElementById('crWeek');
-  if(DATA_MIN_DATE){const [y,mn,dy]=DATA_MIN_DATE.split('-');e.min = `${y}-W${getISOWeek(new Date(+y,+mn-1,+dy))}`;}
-  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE; if(!e.value){const [y,mn,dy]=DATA_MAX_DATE.split('-');e.value = `${y}-W${String(getISOWeek(new Date(+y,+mn-1,+dy))).padStart(2,'0')}`;}}
+  if(getDataMinDate()){const [y,mn,dy]=getDataMinDate().split('-');e.min = `${y}-W${getISOWeek(new Date(+y,+mn-1,+dy))}`;}
+  if(getDataMaxDate()){e.max = getDataMaxDate(); if(!e.value){const [y,mn,dy]=getDataMaxDate().split('-');e.value = `${y}-W${String(getISOWeek(new Date(+y,+mn-1,+dy))).padStart(2,'0')}`;}}
 }
 function initCustomMonth(){
   const e=document.getElementById('crMonth');
-  if(DATA_MIN_DATE) e.min = DATA_MIN_DATE.slice(0,7);
-  if(DATA_MAX_DATE){e.max = DATA_MAX_DATE.slice(0,7); if(!e.value) e.value = DATA_MAX_DATE.slice(0,7);}
+  if(getDataMinDate()) e.min = getDataMinDate().slice(0,7);
+  if(getDataMaxDate()){e.max = getDataMaxDate().slice(0,7); if(!e.value) e.value = getDataMaxDate().slice(0,7);}
 }
 
 function onCustomRangeChange(){
@@ -1278,7 +1283,7 @@ function renderCompare() {
   let pickerB = document.getElementById('cmpPickerB');
   if (!pickerA || (type==='custom' && pickerA.tagName!=='INPUT')) {
     if (type === 'custom') {
-      const today = DATA_MAX_DATE || fmtDate(new Date());
+      const today = getDataMaxDate() || fmtDate(new Date());
       const a1 = (()=>{const d=new Date(today);d.setDate(d.getDate()-6);return fmtDate(d);})();
       const b1 = (()=>{const d=new Date(today);d.setDate(d.getDate()-13);return fmtDate(d);})();
       const a2 = (()=>{const d=new Date(today);d.setDate(d.getDate()-20);return fmtDate(d);})();
@@ -1304,10 +1309,10 @@ function renderCompare() {
   // Resolve value depending on type
   let valA, valB;
   if (type === 'custom') {
-    const aTo = document.getElementById('cmpPickerAto')?.value || DATA_MAX_DATE;
-    const bTo = document.getElementById('cmpPickerBto')?.value || DATA_MAX_DATE;
-    valA = `${pickerA.value||DATA_MIN_DATE}|${aTo}`;
-    valB = `${pickerB.value||DATA_MIN_DATE}|${bTo}`;
+    const aTo = document.getElementById('cmpPickerAto')?.value || getDataMaxDate();
+    const bTo = document.getElementById('cmpPickerBto')?.value || getDataMaxDate();
+    valA = `${pickerA.value||getDataMinDate()}|${aTo}`;
+    valB = `${pickerB.value||getDataMinDate()}|${bTo}`;
   } else {
     valA = pickerA.value;
     valB = pickerB.value;
@@ -1326,8 +1331,8 @@ function renderCompare() {
   // Build picker control HTML for the non-custom case
   let pickerAHTML, pickerBHTML;
   if (type === 'custom') {
-    const aTo = document.getElementById('cmpPickerAto')?.value || DATA_MAX_DATE;
-    const bTo = document.getElementById('cmpPickerBto')?.value || DATA_MAX_DATE;
+    const aTo = document.getElementById('cmpPickerAto')?.value || getDataMaxDate();
+    const bTo = document.getElementById('cmpPickerBto')?.value || getDataMaxDate();
     pickerAHTML = '<div style="display:flex;gap:6px;align-items:center"><input type="date" class="compare-select" id="cmpPickerA" value="'+(pickerA.value||'')+'" onchange="renderCompare()" style="flex:1"><span style="color:var(--text2);font-size:12px">至</span><input type="date" class="compare-select" id="cmpPickerAto" value="'+aTo+'" onchange="renderCompare()" style="flex:1"></div>';
     pickerBHTML = '<div style="display:flex;gap:6px;align-items:center"><input type="date" class="compare-select" id="cmpPickerB" value="'+(pickerB.value||'')+'" onchange="renderCompare()" style="flex:1"><span style="color:var(--text2);font-size:12px">至</span><input type="date" class="compare-select" id="cmpPickerBto" value="'+bTo+'" onchange="renderCompare()" style="flex:1"></div>';
   } else {
