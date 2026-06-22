@@ -933,7 +933,7 @@ function refreshFromFeishu(silent) {
       if (data.updated_at) {
         const dataTime = new Date(data.updated_at.replace(' ','T')).getTime();
         const age = Date.now() - dataTime;
-        if (age < 180000) { // 3分钟内，直接使用
+        if (age < 360000) { // 6分钟内，直接使用
           loadDataToPage(data, silent);
           hideLoading();
           if (btn) btn.classList.remove('loading');
@@ -941,7 +941,7 @@ function refreshFromFeishu(silent) {
         }
       }
       // 数据不够新，轮询等待 Actions 更新（最多等2.5分钟）
-      if (!silent) showToast('⏳ 等待最新数据，Actions 每2分钟自动拉取...');
+      if (!silent) showToast('⏳ 等待最新数据，Actions 每5分钟自动拉取...');
       return waitForFreshData().then(freshData => {
         loadDataToPage(freshData, silent);
         hideLoading();
