@@ -2,7 +2,7 @@ name: Fetch Feishu Data & Deploy
 
 on:
   schedule:
-    - cron: '0 * * * *'       # 每小时兜底自动拉取
+    - cron: '*/5 * * * *'   # 每5分钟自动拉取
   workflow_dispatch:          # 手动触发
 
 jobs:
