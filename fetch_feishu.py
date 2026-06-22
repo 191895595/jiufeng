@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
 SPREADSHEET_TOKEN = os.environ["SPREADSHEET_TOKEN"]
-SHEET_ID = "0XGxqd"
+TARGET_SHEET_NAME = "Sheet1"  # 始终只读 Sheet1，忽略其他工作簿
 
 
 def get_token():
@@ -30,16 +30,25 @@ def fetch_all():
     token = get_token()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    # 获取行数
+    # 获取所有工作表，找到 Sheet1
     meta_url = f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{SPREADSHEET_TOKEN}/sheets/query"
     meta = json.loads(urllib.request.urlopen(urllib.request.Request(meta_url, headers=headers)).read())
-    total = meta["data"]["sheets"][0]["grid_properties"]["row_count"]
+    sheets = meta["data"]["sheets"]
+    
+    # 始终只取 Sheet1，忽略其他工作簿
+    sheet1 = next((s for s in sheets if s["title"] == TARGET_SHEET_NAME), None)
+    if not sheet1:
+        raise Exception(f"未找到工作表「{TARGET_SHEET_NAME}」，当前工作表：{[s['title'] for s in sheets]}")
+    
+    sheet_id = sheet1["sheet_id"]
+    total = sheet1["grid_properties"]["row_count"]
+    print(f"📋 读取工作表: {TARGET_SHEET_NAME} (id={sheet_id}, {total}行)")
 
     # 分批读取
     all_rows = []
     for start in range(1, total + 1, 5000):
         end = min(start + 4999, total)
-        url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{urllib.parse.quote(f'{SHEET_ID}!A{start}:D{end}')}"
+        url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{urllib.parse.quote(f'{sheet_id}!A{start}:D{end}')}"
         resp = json.loads(urllib.request.urlopen(urllib.request.Request(url, headers=headers)).read())
         vals = resp["data"]["valueRange"]["values"]
         all_rows.extend(vals if start > 1 else vals)
