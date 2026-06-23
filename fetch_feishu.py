@@ -68,6 +68,16 @@ def fetch_all():
         except:
             continue
 
+    # 按 (日期, 渠道, 细分渠道) 合并去重（飞书表格中同一店铺同一天可能有多行）
+    merged = {}
+    for r in records:
+        key = (r["日期"], r["渠道"], r["细分渠道"])
+        if key not in merged:
+            merged[key] = r
+        else:
+            merged[key]["销售额"] = round(merged[key]["销售额"] + r["销售额"], 2)
+    records = list(merged.values())
+
     total_sales = sum(r["销售额"] for r in records)
     dates = sorted(set(r["日期"] for r in records))
 

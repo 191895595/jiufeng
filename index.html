@@ -758,7 +758,7 @@ function renderAll() {
   channelPieChart = new Chart(pieCtx, {
     type: 'doughnut',
     data: {
-      labels: pieData.map(c=>(c[pieLabelKey]||'').length>20?(c[pieLabelKey]||'').slice(0,20)+'…':(c[pieLabelKey]||'')),
+      labels: pieData.map(c=>c[pieLabelKey]||''),
       datasets: [{ data: pieData.map(c=>c.sales), backgroundColor: CH_COLORS.slice(0,pieData.length), borderWidth:0, hoverBorderWidth:3, hoverBorderColor:'#fff' }]
     },
     options: {
@@ -819,7 +819,7 @@ function renderAll() {
     channelBarChart = new Chart(barCtx, {
       type: 'bar',
       data: {
-        labels: growthList.map(c=>c.name.length>20?c.name.slice(0,20)+'…':c.name),
+        labels: growthList.map(c=>c.name),
         datasets: [{ label:'环比增长%', data: growthList.map(c=>c.growth), 
           backgroundColor: growthList.map(c=>c.growth>=0?'rgba(52,199,89,0.75)':'rgba(255,59,48,0.75)'), 
           borderRadius: 6, borderSkipped: false }]
@@ -864,7 +864,7 @@ function renderAll() {
     channelBarChart = new Chart(barCtx, {
       type: 'bar',
       data: {
-        labels: barTop.map(c=>(c.channel||'').length>12?(c.channel||'').slice(0,12)+'…':(c.channel||'')),
+        labels: barTop.map(c=>c.channel||''),
         datasets: [{ label:'销售额',data:barTop.map(c=>c.sales),backgroundColor:barTop.map((_,i)=>CH_COLORS[i%CH_COLORS.length]),borderRadius:6,borderSkipped:false }]
       },
       options: {
@@ -902,7 +902,7 @@ function renderAll() {
   subChannelBarChart = new Chart(subCtx, {
     type: 'bar',
     data: {
-      labels: top15.map(c=>c.sub.length>20?c.sub.slice(0,20)+'…':c.sub),
+      labels: top15.map(c=>c.sub),
       datasets: [{ label:'销售额',data:top15.map(c=>c.sales),backgroundColor:top15.map((_,i)=>CH_COLORS[i%CH_COLORS.length]),borderRadius:6,borderSkipped:false }]
     },
     options: {
@@ -1754,7 +1754,7 @@ function renderCompare() {
     const chart = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: chanData.map(c=>c.channel.length>8?c.channel.slice(0,8)+'…':c.channel),
+        labels: chanData.map(c=>c.channel),
         datasets: [{ label:'销售额',data:chanData.map(c=>c.sales),backgroundColor:color+'CC',borderRadius:6,borderSkipped:false }]
       },
       options: {
