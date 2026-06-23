@@ -53,20 +53,36 @@ def fetch_all():
         vals = resp["data"]["valueRange"]["values"]
         all_rows.extend(vals if start > 1 else vals)
 
-    # 解析
+    # 解析（跳过表头第一行）
     records = []
+    skipped = 0
     for row in all_rows[1:]:
-        if len(row) < 4:
-            continue
+        # 如果第一列为空，可能是空行或汇总行，停止解析
+        if not row or len(row) < 4:
+            break
+        first_cell = row[0]
+        if first_cell is None or (isinstance(first_cell, str) and not first_cell.strip()):
+            break  # 遇到空行停止
         try:
-            d = excel_date(row[0]) if isinstance(row[0], (int, float)) else str(row[0]).strip()
-            ch = str(row[1]).strip()
-            sub = str(row[2]).strip().replace("\n", "")
-            s = float(row[3])
-            if s > 0 and d.startswith("202"):
-                records.append({"日期": d, "渠道": ch, "细分渠道": sub, "销售额": round(s, 2)})
+            d = excel_date(first_cell) if isinstance(first_cell, (int, float)) else str(first_cell).strip()
+            ch = str(row[1]).strip() if row[1] else ''
+            sub = str(row[2]).strip().replace("\n", "") if row[2] else ''
+            s = float(row[3]) if row[3] is not None else 0
+            if not d.startswith("202"):
+                skipped += 1
+                continue
+            if not ch:
+                skipped += 1
+                continue
+            if s <= 0:
+                skipped += 1
+                continue
+            records.append({"日期": d, "渠道": ch, "细分渠道": sub, "销售额": round(s, 2)})
         except:
+            skipped += 1
             continue
+
+    print(f"📋 跳过 {skipped} 行（非日期/无渠道/销售额≤0）")
 
     # 按 (日期, 渠道, 细分渠道) 合并去重（飞书表格中同一店铺同一天可能有多行）
     merged = {}
