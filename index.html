@@ -1282,15 +1282,15 @@ function renderDropdown(listId, items, selected, prefix) {
   const list = document.getElementById(listId);
   if (!list) return;
   const allChecked = selected.length === 0;
-  let html = `<label style="font-weight:600;border-bottom:1px solid var(--border);margin-bottom:4px;padding-bottom:8px">
-    <input type="checkbox" id="${prefix}AllCheck" ${allChecked?'checked':''} onchange="toggleAllCheckbox('${prefix}')"> 全选
+  let html = `<label style="font-weight:600;border-bottom:1px solid var(--border);margin-bottom:6px;padding-bottom:8px">
+    <input type="checkbox" id="${prefix}AllCheck" ${allChecked?'checked':''} onchange="toggleAllCheckbox('${prefix}')"> <b>全选</b>
   </label>`;
   items.forEach(item => {
     const checked = selected.length === 0 || selected.includes(item);
     html += `<label><input type="checkbox" class="${prefix}Item" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onItemCheckboxChange('${prefix}')">${item}</label>`;
   });
   html += `<div class="multi-dropdown-actions">
-    <button class="btn-ok" onclick="closeDropdown('${prefix}Dropdown')">确定</button>
+    <button class="btn-ok" onclick="applyAndClose('${prefix}')">确定</button>
   </div>`;
   list.innerHTML = html;
 }
@@ -1300,15 +1300,18 @@ function toggleAllCheckbox(prefix) {
   const items = document.querySelectorAll('.'+prefix+'Item');
   const allOn = allCheck.checked;
   items.forEach(cb => { cb.checked = allOn; });
-  applyCheckboxSelection(prefix);
+  // 更新全选 checkbox 自身的 indeterminate 状态
+  if (allCheck) allCheck.indeterminate = false;
 }
 
 function onItemCheckboxChange(prefix) {
   const allCheck = document.getElementById(prefix+'AllCheck');
   const items = document.querySelectorAll('.'+prefix+'Item');
-  const allOn = Array.from(items).every(cb => cb.checked);
-  if (allCheck) allCheck.checked = allOn;
-  applyCheckboxSelection(prefix);
+  const checkedCount = Array.from(items).filter(cb => cb.checked).length;
+  if (allCheck) {
+    allCheck.checked = checkedCount === items.length;
+    allCheck.indeterminate = checkedCount > 0 && checkedCount < items.length;
+  }
 }
 
 function applyCheckboxSelection(prefix) {
@@ -1322,6 +1325,11 @@ function applyCheckboxSelection(prefix) {
   }
   updateDropdownLabels();
   renderAll();
+}
+
+function applyAndClose(prefix) {
+  applyCheckboxSelection(prefix);
+  closeDropdown(prefix+'Dropdown');
 }
 
 function selectAll(prefix) {
@@ -1361,7 +1369,12 @@ function closeDropdown(id) {
 
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.multi-dropdown')) {
-    document.querySelectorAll('.multi-dropdown-panel').forEach(p => p.classList.remove('show'));
+    document.querySelectorAll('.multi-dropdown-panel.show').forEach(p => {
+      // Apply selection before closing
+      if (p.id === 'chanDropdownPanel') applyCheckboxSelection('chan');
+      if (p.id === 'subDropdownPanel') applyCheckboxSelection('sub');
+      p.classList.remove('show');
+    });
   }
 });
 
