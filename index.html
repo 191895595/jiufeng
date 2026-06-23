@@ -1313,11 +1313,13 @@ function loadDataToPage(data, silent) {
   const cs = document.getElementById('chanSelect'); if (cs) cs.value='all';
   const ss = document.getElementById('subChanSelect'); if (ss) ss.value='all';
 
-  // 格式化显示时间：去掉日期只保留时间，或显示友好格式
+  // 格式化显示时间
   const dtParts = data.updated_at ? data.updated_at.split(' ') : ['',''];
   const dateShort = dtParts[0] ? dtParts[0].slice(5).replace('-','/').replace('-','/') : '';
   const timeSec = dtParts[1] || '';
-  document.getElementById('lastUpdate').textContent = '📊 飞书数据 · '+dateShort+' '+timeSec+' 更新 · '+data.record_count.toLocaleString()+' 条记录';
+  const now = new Date();
+  const refreshTime = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+  document.getElementById('lastUpdate').textContent = '📊 飞书数据 · '+dateShort+' '+timeSec+' 更新 · 页面刷新 '+refreshTime+' · '+data.record_count.toLocaleString()+' 条记录';
   const db = document.getElementById('downloadBtn'); if (db) db.disabled = false;
 
   destroyCharts();
