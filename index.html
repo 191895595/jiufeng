@@ -758,7 +758,7 @@ function renderAll() {
   channelPieChart = new Chart(pieCtx, {
     type: 'doughnut',
     data: {
-      labels: pieData.map(c=>(c[pieLabelKey]||'').length>10?(c[pieLabelKey]||'').slice(0,10)+'…':(c[pieLabelKey]||'')),
+      labels: pieData.map(c=>(c[pieLabelKey]||'').length>20?(c[pieLabelKey]||'').slice(0,20)+'…':(c[pieLabelKey]||'')),
       datasets: [{ data: pieData.map(c=>c.sales), backgroundColor: CH_COLORS.slice(0,pieData.length), borderWidth:0, hoverBorderWidth:3, hoverBorderColor:'#fff' }]
     },
     options: {
@@ -819,7 +819,7 @@ function renderAll() {
     channelBarChart = new Chart(barCtx, {
       type: 'bar',
       data: {
-        labels: growthList.map(c=>c.name.length>10?c.name.slice(0,10)+'…':c.name),
+        labels: growthList.map(c=>c.name.length>20?c.name.slice(0,20)+'…':c.name),
         datasets: [{ label:'环比增长%', data: growthList.map(c=>c.growth), 
           backgroundColor: growthList.map(c=>c.growth>=0?'rgba(52,199,89,0.75)':'rgba(255,59,48,0.75)'), 
           borderRadius: 6, borderSkipped: false }]
@@ -902,7 +902,7 @@ function renderAll() {
   subChannelBarChart = new Chart(subCtx, {
     type: 'bar',
     data: {
-      labels: top15.map(c=>c.sub.length>12?c.sub.slice(0,12)+'…':c.sub),
+      labels: top15.map(c=>c.sub.length>20?c.sub.slice(0,20)+'…':c.sub),
       datasets: [{ label:'销售额',data:top15.map(c=>c.sales),backgroundColor:top15.map((_,i)=>CH_COLORS[i%CH_COLORS.length]),borderRadius:6,borderSkipped:false }]
     },
     options: {
@@ -1416,7 +1416,13 @@ let allSubChannels = [];
 
 function buildFilterPills() {
   allChannels = [...new Set(allData.map(d => d['渠道']))].sort();
-  allSubChannels = [...new Set(allData.map(d => d['细分渠道']))].sort();
+  // 细分渠道联动：如果有渠道筛选，只显示选中渠道下的店铺
+  if (chanFilters.length > 0) {
+    const filteredData = allData.filter(d => chanFilters.includes(d['渠道']));
+    allSubChannels = [...new Set(filteredData.map(d => d['细分渠道']))].sort();
+  } else {
+    allSubChannels = [...new Set(allData.map(d => d['细分渠道']))].sort();
+  }
   renderDropdown('chanDropdownList', allChannels, chanFilters, 'chan');
   renderDropdown('subDropdownList', allSubChannels, subChanFilters, 'sub');
   updateDropdownLabels();
@@ -1491,6 +1497,9 @@ function applyCheckboxSelection(prefix) {
   items.forEach(cb => { if (cb.checked) selected.push(cb.value); });
   if (prefix === 'chan') {
     chanFilters = selected.length === allChannels.length ? [] : selected;
+    // 渠道变化后，重置细分渠道筛选并重建细分下拉列表
+    subChanFilters = [];
+    buildFilterPills();
   } else {
     subChanFilters = selected.length === allSubChannels.length ? [] : selected;
   }
