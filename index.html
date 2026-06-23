@@ -554,31 +554,27 @@ function aggBySub(data) {
 const dataLabelsPlugin = {
   id: 'dataLabels',
   afterDraw(chart) {
-    const { ctx, chartArea: { top, bottom, left, right }, data: { datasets } } = chart;
+    const { ctx, data: { datasets } } = chart;
     const meta = chart.getDatasetMeta(0);
     if (!meta || !datasets[0]) return;
     const total = datasets[0].data.reduce((a, b) => a + b, 0);
     ctx.save();
     ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#1d1d1f';
     meta.data.forEach((arc, i) => {
       const val = datasets[0].data[i];
       if (val === 0) return;
       const pct = ((val / total) * 100).toFixed(1);
       const angle = (arc.startAngle + arc.endAngle) / 2;
       const outerRadius = arc.outerRadius;
-      // Place label slightly inside from the outer edge
-      const r = outerRadius * 0.72;
+      // Place label outside the ring
+      const r = outerRadius + 18;
       const x = arc.x + Math.cos(angle) * r;
       const y = arc.y + Math.sin(angle) * r;
-      ctx.fillStyle = '#fff';
-      ctx.shadowColor = 'rgba(0,0,0,0.2)';
-      ctx.shadowBlur = 2;
-      ctx.fillText(pct + '%', x, y - 4);
-      ctx.fillText('¥' + (val / 10000).toFixed(1) + '万', x, y + 12);
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
+      // Adjust text alignment based on position
+      ctx.textAlign = Math.cos(angle) > 0.1 ? 'left' : (Math.cos(angle) < -0.1 ? 'right' : 'center');
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pct + '%', x, y);
     });
     ctx.restore();
   }
