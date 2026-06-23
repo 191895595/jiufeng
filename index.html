@@ -60,12 +60,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .multi-dropdown-list label{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;font-size:13px;cursor:pointer;transition:var(--t);white-space:nowrap}
 .multi-dropdown-list label:hover{background:#f5f5f7}
 .multi-dropdown-list input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
-.multi-dropdown-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border)}
-.multi-dropdown-actions button{flex:1;padding:6px;border-radius:8px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:var(--t)}
-.multi-dropdown-actions .btn-all{background:var(--accent-light);color:var(--accent)}
-.multi-dropdown-actions .btn-all:hover{background:var(--accent);color:#fff}
-.multi-dropdown-actions .btn-ok{background:var(--accent);color:#fff}
-.multi-dropdown-actions .btn-ok:hover{background:#0077ed}
+.multi-dropdown-list .inline-ok-btn{display:none;margin-left:auto;padding:3px 10px;border-radius:10px;border:none;font-size:11px;font-weight:600;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;transition:var(--t);white-space:nowrap;flex-shrink:0}
+.multi-dropdown-list .inline-ok-btn.show{display:inline-block}
+.multi-dropdown-list .inline-ok-btn:hover{background:#0077ed}
+.multi-dropdown-list .item-just-changed{background:#e8f0fe;border-radius:8px}
 
 
 
@@ -552,6 +550,62 @@ function aggBySub(data) {
   }).sort((a,b) => b.sales - a.sales);
 }
 
+// ===== Custom datalabels plugin =====
+const dataLabelsPlugin = {
+  id: 'dataLabels',
+  afterDraw(chart) {
+    const { ctx, chartArea: { top, bottom, left, right }, data: { datasets } } = chart;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !datasets[0]) return;
+    const total = datasets[0].data.reduce((a, b) => a + b, 0);
+    ctx.save();
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach((arc, i) => {
+      const val = datasets[0].data[i];
+      if (val === 0) return;
+      const pct = ((val / total) * 100).toFixed(1);
+      const angle = (arc.startAngle + arc.endAngle) / 2;
+      const outerRadius = arc.outerRadius;
+      // Place label slightly inside from the outer edge
+      const r = outerRadius * 0.72;
+      const x = arc.x + Math.cos(angle) * r;
+      const y = arc.y + Math.sin(angle) * r;
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.2)';
+      ctx.shadowBlur = 2;
+      ctx.fillText(pct + '%', x, y - 4);
+      ctx.fillText('¥' + (val / 10000).toFixed(1) + '万', x, y + 12);
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+    });
+    ctx.restore();
+  }
+};
+
+// ===== Custom bar labels plugin =====
+const barLabelsPlugin = {
+  id: 'barLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx, scales: { x, y } } = chart;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta) return;
+    ctx.save();
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    meta.data.forEach((bar, i) => {
+      const val = chart.data.datasets[0].data[i];
+      if (val === 0) return;
+      const label = '¥' + (val / 10000).toFixed(1) + '万';
+      ctx.fillStyle = '#1d1d1f';
+      ctx.fillText(label, bar.x, bar.y - 4);
+    });
+    ctx.restore();
+  }
+};
+
 // ===== Charts =====
 let trendChart, channelPieChart, channelBarChart, subChannelBarChart, cmpChartA, cmpChartB;
 
@@ -715,7 +769,8 @@ function renderAll() {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
       plugins: { legend:{position:'bottom',labels:{padding:16,usePointStyle:true,pointStyleWidth:8,font:{size:12},color:'#6e6e73'}},
         tooltip:{backgroundColor:'#1d1d1f',callbacks:{label:ctx=>ctx.label+': ¥'+ctx.parsed.toLocaleString()+' ('+((ctx.parsed/pieTotal)*100).toFixed(1)+'%)'}} }
-    }
+    },
+    plugins: [dataLabelsPlugin]
   });
 
   // Channel/Sub-channel Bar — shows 环比 growth TOP15 when channel selected
@@ -861,7 +916,25 @@ function renderAll() {
         x: { grid:{color:'#f0f0f2'}, ticks:{font:{size:11},color:'#aeaeb2',callback:v=>(v/10000).toFixed(1)+'万'} },
         y: { grid:{display:false}, ticks:{font:{size:11},color:'#6e6e73'} }
       }
-    }
+    },
+    plugins: [{
+      id: 'subBarLabels',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const meta = chart.getDatasetMeta(0);
+        meta.data.forEach((bar, i) => {
+          const v = chart.data.datasets[0].data[i];
+          ctx.save();
+          ctx.font = '600 10px -apple-system,sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#1d1d1f';
+          const label = v >= 10000 ? (v/10000).toFixed(1)+'万' : '¥'+v.toFixed(0);
+          ctx.fillText(label, bar.x + 6, bar.y);
+          ctx.restore();
+        });
+      }
+    }]
   });
 
   // Channel table
@@ -1282,16 +1355,17 @@ function renderDropdown(listId, items, selected, prefix) {
   const list = document.getElementById(listId);
   if (!list) return;
   const allChecked = selected.length === 0;
-  let html = `<label style="font-weight:600;border-bottom:1px solid var(--border);margin-bottom:6px;padding-bottom:8px">
+  let html = `<label class="${prefix}ItemRow" style="font-weight:600;border-bottom:1px solid var(--border);margin-bottom:6px;padding-bottom:8px">
     <input type="checkbox" id="${prefix}AllCheck" ${allChecked?'checked':''} onchange="toggleAllCheckbox('${prefix}')"> <b>全选</b>
+    <button class="inline-ok-btn" onclick="event.stopPropagation();applyAndClose('${prefix}')">确定</button>
   </label>`;
   items.forEach(item => {
     const checked = selected.length === 0 || selected.includes(item);
-    html += `<label><input type="checkbox" class="${prefix}Item" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onItemCheckboxChange('${prefix}')">${item}</label>`;
+    html += `<label class="${prefix}ItemRow">
+      <input type="checkbox" class="${prefix}Item" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onItemCheckboxChange('${prefix}', this)">${item}
+      <button class="inline-ok-btn" onclick="event.stopPropagation();applyAndClose('${prefix}')">确定</button>
+    </label>`;
   });
-  html += `<div class="multi-dropdown-actions">
-    <button class="btn-ok" onclick="applyAndClose('${prefix}')">确定</button>
-  </div>`;
   list.innerHTML = html;
 }
 
@@ -1302,15 +1376,39 @@ function toggleAllCheckbox(prefix) {
   items.forEach(cb => { cb.checked = allOn; });
   // 更新全选 checkbox 自身的 indeterminate 状态
   if (allCheck) allCheck.indeterminate = false;
+  // 清除之前所有「确定」按钮和高亮
+  document.querySelectorAll('.'+prefix+'ItemRow .inline-ok-btn').forEach(b => b.classList.remove('show'));
+  document.querySelectorAll('.'+prefix+'ItemRow').forEach(r => r.classList.remove('item-just-changed'));
+  // 在全选行显示「确定」按钮
+  if (allCheck) {
+    const row = allCheck.closest('.'+prefix+'ItemRow');
+    if (row) {
+      row.classList.add('item-just-changed');
+      const okBtn = row.querySelector('.inline-ok-btn');
+      if (okBtn) okBtn.classList.add('show');
+    }
+  }
 }
 
-function onItemCheckboxChange(prefix) {
+function onItemCheckboxChange(prefix, changedCb) {
   const allCheck = document.getElementById(prefix+'AllCheck');
   const items = document.querySelectorAll('.'+prefix+'Item');
   const checkedCount = Array.from(items).filter(cb => cb.checked).length;
   if (allCheck) {
     allCheck.checked = checkedCount === items.length;
     allCheck.indeterminate = checkedCount > 0 && checkedCount < items.length;
+  }
+  // 清除之前所有「确定」按钮和高亮
+  document.querySelectorAll('.'+prefix+'ItemRow .inline-ok-btn').forEach(b => b.classList.remove('show'));
+  document.querySelectorAll('.'+prefix+'ItemRow').forEach(r => r.classList.remove('item-just-changed'));
+  // 在当前变化的行显示「确定」按钮并高亮
+  if (changedCb) {
+    const row = changedCb.closest('.'+prefix+'ItemRow');
+    if (row) {
+      row.classList.add('item-just-changed');
+      const okBtn = row.querySelector('.inline-ok-btn');
+      if (okBtn) okBtn.classList.add('show');
+    }
   }
 }
 
@@ -1584,7 +1682,25 @@ function renderCompare() {
           x: { grid:{display:false}, ticks:{font:{size:10},color:'#6e6e73',maxRotation:25} },
           y: { grid:{color:'#f0f0f2'}, ticks:{font:{size:10},color:'#aeaeb2',callback:v=>(v/10000).toFixed(1)+'万'} }
         }
-      }
+      },
+      plugins: [{
+        id: 'cmpBarLabels',
+        afterDatasetsDraw(chart) {
+          const ctx = chart.ctx;
+          const meta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.font = '600 10px -apple-system,sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillStyle = '#1d1d1f';
+          meta.data.forEach((bar, i) => {
+            const v = chart.data.datasets[0].data[i];
+            const label = v >= 10000 ? (v/10000).toFixed(1)+'万' : '¥'+v.toFixed(0);
+            ctx.fillText(label, bar.x, bar.y - 4);
+          });
+          ctx.restore();
+        }
+      }]
     });
     if (canvasId==='cmpChartA') cmpChartA = chart; else cmpChartB = chart;
   }
