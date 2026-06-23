@@ -137,9 +137,9 @@ def fetch_all():
             # 细分渠道
             sub = str(row[2]).strip().replace("\n", "").replace("\r", "") if row[2] else ''
             
-            # 销售额
+            # 销售额（允许负数，表示退款）
             s = float(row[3]) if row[3] is not None else 0
-            if s <= 0:
+            if s == 0:  # 只跳过真正的0值，负数保留
                 stats["no_sales"] += 1
                 continue
             
