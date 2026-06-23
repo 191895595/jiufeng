@@ -1157,7 +1157,27 @@ function triggerActionsSync(prevUpdated) {
     if (el) el.textContent = msg;
   }
 
+  function updateProgress(elapsed, maxSec) {
+    const bar = document.getElementById('refreshBar');
+    if (bar) {
+      const pct = Math.min((elapsed / maxSec) * 100, 95);
+      bar.style.width = pct + '%';
+    }
+    const timer = document.getElementById('refreshTimer');
+    if (timer) {
+      timer.textContent = '上次更新：' + prevUpdated + ' | 已等待 ' + Math.round(elapsed) + ' 秒';
+    }
+  }
+
   updateStatus('⏳ 已触发数据同步，Actions 正在拉取飞书数据...');
+  updateProgress(0, 80);
+
+  // 分阶段等待：先等 25s Actions 跑完，再等 30s Pages 部署，最后等 20s CDN 刷新
+  // 总计约 75 秒
+  const stage1 = 25; // Actions fetch + commit
+  const stage2 = 55; // Pages build + deploy
+  const stage3 = 80; // CDN cache refresh + final load
+  let stageDone = false;
 
   function poll() {
     if (window._refreshCancelled) {
@@ -1165,51 +1185,57 @@ function triggerActionsSync(prevUpdated) {
       return;
     }
     pollCount++;
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    
-    // 更新进度条和计时器
-    const bar = document.getElementById('refreshBar');
-    if (bar) {
-      const pct = Math.min((elapsed / 300) * 100, 95);
-      bar.style.width = pct + '%';
-    }
-    const timer = document.getElementById('refreshTimer');
-    if (timer) {
-      timer.textContent = '上次更新：' + prevUpdated + ' | 已等待 ' + elapsed + ' 秒 | 第 ' + pollCount + ' 次检查';
-    }
+    const elapsed = (Date.now() - startTime) / 1000;
 
-    if (elapsed > 360) {
-      updateStatus('⏰ 等待超时，请稍后重试或检查飞书数据是否已更新');
-      setTimeout(() => hideRefreshProgress(), 3000);
+    updateProgress(elapsed, stage3);
+
+    if (elapsed < stage1) {
+      updateStatus('⏳ 阶段 1/3：Actions 正在从飞书拉取数据...（约 ' + Math.round(stage1 - elapsed) + ' 秒）');
+      setTimeout(poll, 3000);
+      return;
+    }
+    if (elapsed < stage2) {
+      updateStatus('⏳ 阶段 2/3：GitHub Pages 正在部署...（约 ' + Math.round(stage2 - elapsed) + ' 秒）');
+      setTimeout(poll, 3000);
+      return;
+    }
+    if (elapsed < stage3) {
+      updateStatus('⏳ 阶段 3/3：等待 CDN 缓存刷新...（约 ' + Math.round(stage3 - elapsed) + ' 秒）');
+      setTimeout(poll, 2000);
       return;
     }
 
-    // 检查 data.json 是否更新了
-    fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS)
-      .then(r => r.json())
-      .then(data => {
-        if (data.updated_at && data.updated_at !== prevUpdated) {
-          // 数据已更新！
+    // 所有阶段完成，强制加载最新数据
+    if (!stageDone) {
+      stageDone = true;
+      updateStatus('✅ 正在加载最新数据...');
+      updateProgress(stage3, stage3);
+      
+      // 用更强的缓存破坏：加随机参数
+      fetch(DATA_URL + '?v=' + Date.now() + '&r=' + Math.random(), FETCH_OPTS)
+        .then(r => r.json())
+        .then(data => {
           updateStatus('✅ 数据同步成功！');
           hideRefreshProgress();
           loadDataToPage(data, false);
           showToast('✅ 最新数据已同步！' + data.record_count + ' 条记录');
-          return;
-        }
-        // 数据还没更新，继续等
-        if (pollCount <= 2) {
-          updateStatus('⏳ Actions 正在从飞书拉取数据（约需 15-30 秒）...');
-        } else if (pollCount <= 6) {
-          updateStatus('⏳ 等待 Actions 完成部署（约需 20-40 秒）...');
-        } else {
-          updateStatus('⏳ 等待 GitHub Pages 更新缓存...（第 ' + pollCount + ' 次检查）');
-        }
-        setTimeout(poll, 5000);
-      })
-      .catch(() => {
-        updateStatus('⚠️ 网络检查失败，重试中...');
-        setTimeout(poll, 5000);
-      });
+        })
+        .catch(() => {
+          // 回退：不带额外参数再试一次
+          fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS)
+            .then(r => r.json())
+            .then(data => {
+              updateStatus('✅ 数据同步成功！');
+              hideRefreshProgress();
+              loadDataToPage(data, false);
+              showToast('✅ 最新数据已同步！');
+            })
+            .catch(() => {
+              updateStatus('⚠️ 加载失败，请手动刷新页面');
+              setTimeout(() => hideRefreshProgress(), 3000);
+            });
+        });
+    }
   }
 
   // 首次延迟 3 秒后开始轮询
