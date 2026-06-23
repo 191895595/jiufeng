@@ -92,7 +92,11 @@ def fetch_all():
     all_rows = []
     for start in range(1, total + 1, 5000):
         end = min(start + 4999, total)
-        url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{urllib.parse.quote(f'{sheet_id}!A{start}:D{end}')}"
+        params = urllib.parse.urlencode({
+            'valueRenderOption': 'ToString',
+            'dateTimeRenderOption': 'FormattedString'
+        })
+        url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{urllib.parse.quote(f'{sheet_id}!A{start}:D{end}')}?{params}"
         resp = json.loads(urllib.request.urlopen(urllib.request.Request(url, headers=headers)).read())
         vals = resp["data"]["valueRange"]["values"]
         all_rows.extend(vals if start > 1 else vals)
@@ -125,6 +129,9 @@ def fetch_all():
             ch = str(row[1]).strip() if row[1] else ''
             if not ch:
                 stats["no_channel"] += 1
+                continue
+            # 跳过汇总行
+            if any(kw in ch for kw in ['合计', '总计', '小计', '汇总', '平均', 'sum', 'total']):
                 continue
             
             # 细分渠道
