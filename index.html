@@ -992,6 +992,10 @@ function toggleDailyDetail(btn, id, name, dailyDataJson) {
     // Parse daily data from JSON (passed via onclick)
     let dailyData = dailyDataJson;
     if (typeof dailyData === 'string') dailyData = JSON.parse(dailyData.replace(/&quot;/g,'"'));
+    // 只取最近30天
+    if (dailyData.length > 30) {
+      dailyData = dailyData.slice(-30);
+    }
     // Render chart
     const canvas = document.getElementById('chart-'+id);
     if (!canvas || dailyData.length < 2) return;
@@ -1004,27 +1008,39 @@ function toggleDailyDetail(btn, id, name, dailyDataJson) {
           label: name,
           data: dailyData.map(d => d.sales),
           borderColor: '#0071e3',
-          backgroundColor: 'rgba(0,113,227,0.08)',
+          backgroundColor: 'rgba(0,113,227,0.06)',
           fill: true,
-          tension: 0.3,
-          pointRadius: 2,
+          tension: 0.4,
+          pointRadius: dailyData.length <= 15 ? 3 : 1.5,
           pointHoverRadius: 5,
+          pointBackgroundColor: '#0071e3',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1.5,
           borderWidth: 2
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: { display: false },
           tooltip: {
             backgroundColor: '#1d1d1f',
-            callbacks: { label: ctx => '¥' + ctx.parsed.y.toLocaleString() }
+            titleFont: { size: 12 },
+            bodyFont: { size: 13 },
+            callbacks: { label: ctx => ' ¥' + ctx.parsed.y.toLocaleString() }
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#aeaeb2', maxTicksLimit: 8 } },
-          y: { grid: { color: '#f0f0f2' }, ticks: { font: { size: 10 }, color: '#aeaeb2', callback: v => (v/10000).toFixed(1)+'万' } }
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, color: '#aeaeb2', maxTicksLimit: dailyData.length <= 10 ? dailyData.length : 8, maxRotation: 0 }
+          },
+          y: {
+            grid: { color: '#f0f0f2' },
+            ticks: { font: { size: 10 }, color: '#aeaeb2', callback: v => v >= 10000 ? (v/10000).toFixed(1)+'万' : '¥'+v.toFixed(0) }
+          }
         }
       }
     });
