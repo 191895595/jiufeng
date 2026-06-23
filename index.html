@@ -1281,23 +1281,40 @@ function buildFilterPills() {
 function renderDropdown(listId, items, selected, prefix) {
   const list = document.getElementById(listId);
   if (!list) return;
-  let html = '';
+  const allChecked = selected.length === 0;
+  let html = `<label style="font-weight:600;border-bottom:1px solid var(--border);margin-bottom:4px;padding-bottom:8px">
+    <input type="checkbox" id="${prefix}AllCheck" ${allChecked?'checked':''} onchange="toggleAllCheckbox('${prefix}')"> 全选
+  </label>`;
   items.forEach(item => {
     const checked = selected.length === 0 || selected.includes(item);
-    html += `<label><input type="checkbox" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onCheckboxChange('${prefix}')">${item}</label>`;
+    html += `<label><input type="checkbox" class="${prefix}Item" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onItemCheckboxChange('${prefix}')">${item}</label>`;
   });
   html += `<div class="multi-dropdown-actions">
-    <button class="btn-all" onclick="selectAll('${prefix}')">全选</button>
     <button class="btn-ok" onclick="closeDropdown('${prefix}Dropdown')">确定</button>
   </div>`;
   list.innerHTML = html;
 }
 
-function onCheckboxChange(prefix) {
-  const listId = prefix === 'chan' ? 'chanDropdownList' : 'subDropdownList';
-  const checks = document.querySelectorAll('#'+listId+' input[type=checkbox]');
+function toggleAllCheckbox(prefix) {
+  const allCheck = document.getElementById(prefix+'AllCheck');
+  const items = document.querySelectorAll('.'+prefix+'Item');
+  const allOn = allCheck.checked;
+  items.forEach(cb => { cb.checked = allOn; });
+  applyCheckboxSelection(prefix);
+}
+
+function onItemCheckboxChange(prefix) {
+  const allCheck = document.getElementById(prefix+'AllCheck');
+  const items = document.querySelectorAll('.'+prefix+'Item');
+  const allOn = Array.from(items).every(cb => cb.checked);
+  if (allCheck) allCheck.checked = allOn;
+  applyCheckboxSelection(prefix);
+}
+
+function applyCheckboxSelection(prefix) {
+  const items = document.querySelectorAll('.'+prefix+'Item');
   const selected = [];
-  checks.forEach(cb => { if (cb.checked) selected.push(cb.value); });
+  items.forEach(cb => { if (cb.checked) selected.push(cb.value); });
   if (prefix === 'chan') {
     chanFilters = selected.length === allChannels.length ? [] : selected;
   } else {
