@@ -49,12 +49,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .login-submit:hover{background:#0077ed}
 .login-cancel{flex:1;padding:10px;background:#f5f5f7;color:var(--text2);border:none;border-radius:12px;font-size:15px;cursor:pointer;font-family:inherit;transition:var(--t)}
 .login-cancel:hover{background:#e5e5ea}
-.multi-pill-group{display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px 0}
-.multi-pill-group::-webkit-scrollbar{display:none}
-.multi-pill{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:var(--t);white-space:nowrap;font-family:inherit;flex-shrink:0}
-.multi-pill:hover{border-color:var(--accent);color:var(--accent)}
-.multi-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.multi-pill .count{font-size:10px;opacity:.7}
+/* Multi-select dropdown */
+.multi-dropdown{position:relative;flex-shrink:0}
+.multi-dropdown-btn{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:var(--t);white-space:nowrap;font-family:inherit}
+.multi-dropdown-btn:hover{border-color:var(--accent);color:var(--accent)}
+.multi-dropdown-btn.has-selection{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+.multi-dropdown-panel{display:none;position:absolute;top:100%;left:0;margin-top:6px;background:var(--card);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.12);z-index:150;min-width:200px;max-height:320px;overflow:hidden}
+.multi-dropdown-panel.show{display:block}
+.multi-dropdown-list{padding:8px;max-height:300px;overflow-y:auto}
+.multi-dropdown-list label{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;font-size:13px;cursor:pointer;transition:var(--t);white-space:nowrap}
+.multi-dropdown-list label:hover{background:#f5f5f7}
+.multi-dropdown-list input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+.multi-dropdown-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border)}
+.multi-dropdown-actions button{flex:1;padding:6px;border-radius:8px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:var(--t)}
+.multi-dropdown-actions .btn-all{background:var(--accent-light);color:var(--accent)}
+.multi-dropdown-actions .btn-all:hover{background:var(--accent);color:#fff}
+.multi-dropdown-actions .btn-ok{background:var(--accent);color:#fff}
+.multi-dropdown-actions .btn-ok:hover{background:#0077ed}
 
 
 
@@ -288,11 +299,26 @@ th,td{padding:6px 8px;font-size:12px}
 <!-- Channel filter -->
 <div class="channel-filter-row">
 <span class="filter-label">渠道</span>
-<div class="multi-pill-group" id="chanPills"></div>
+<div class="multi-dropdown" id="chanDropdown">
+  <button class="multi-dropdown-btn" onclick="toggleDropdown('chanDropdown')">
+    <span id="chanDropdownLabel">全部渠道</span>
+    <svg width="10" height="6" viewBox="0 0 10 6"><path d="M0 0l5 6 5-6z" fill="#6e6e73"/></svg>
+  </button>
+  <div class="multi-dropdown-panel" id="chanDropdownPanel">
+    <div class="multi-dropdown-list" id="chanDropdownList"></div>
+  </div>
 </div>
-<div class="channel-filter-row">
+<span class="filter-divider"></span>
 <span class="filter-label">细分</span>
-<div class="multi-pill-group" id="subChanPills"></div>
+<div class="multi-dropdown" id="subDropdown">
+  <button class="multi-dropdown-btn" onclick="toggleDropdown('subDropdown')">
+    <span id="subDropdownLabel">全部细分</span>
+    <svg width="10" height="6" viewBox="0 0 10 6"><path d="M0 0l5 6 5-6z" fill="#6e6e73"/></svg>
+  </button>
+  <div class="multi-dropdown-panel" id="subDropdownPanel">
+    <div class="multi-dropdown-list" id="subDropdownList"></div>
+  </div>
+</div>
 <button class="filter-pill" onclick="clearAllFilters()" style="background:#f5f5f7;color:#ff3b30;border:1px solid #ff3b30;flex-shrink:0">清空</button>
 <span style="font-size:12px;color:var(--text3);margin-left:8px" id="filterSummary"></span>
 </div>
@@ -1233,80 +1259,94 @@ function clearAllFilters() {
   if (ap) ap.classList.add('active');
   ['customRange','customDay','customWeek','customMonth'].forEach(id=>document.getElementById(id).classList.remove('show'));
   ['crFrom','crTo','crDay','crWeek','crMonth'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
-  renderChanPills();
-  renderSubChanPills();
+  buildFilterPills();
+  updateDropdownLabels();
   renderAll();
 }
 
-// ===== MULTI-FILTER PILLS =====
+// ===== MULTI-FILTER DROPDOWN =====
 let allChannels = [];
 let allSubChannels = [];
 
 function buildFilterPills() {
   allChannels = [...new Set(allData.map(d => d['渠道']))].sort();
   allSubChannels = [...new Set(allData.map(d => d['细分渠道']))].sort();
-  renderChanPills();
-  renderSubChanPills();
-  // Also update comparison selects
+  renderDropdown('chanDropdownList', allChannels, chanFilters, 'chan');
+  renderDropdown('subDropdownList', allSubChannels, subChanFilters, 'sub');
+  updateDropdownLabels();
   const cmpChan = document.getElementById('cmpChan');
   if (cmpChan) cmpChan.innerHTML = '<option value="all">全部渠道</option>' + allChannels.map(c => '<option value="'+c+'">'+c+'</option>').join('');
 }
 
-function renderChanPills() {
-  const container = document.getElementById('chanPills');
-  if (!container) return;
-  let html = `<button class="multi-pill${chanFilters.length===0?' active':''}" onclick="toggleAllChan()">全部${chanFilters.length===0?'':'<span class=count>'+allChannels.length+'</span>'}</button>`;
-  allChannels.forEach(c => {
-    const active = chanFilters.includes(c);
-    html += `<button class="multi-pill${active?' active':''}" onclick="toggleChan('${c.replace(/'/g,"\\'")}')">${c}${active?' ✓':''}</button>`;
+function renderDropdown(listId, items, selected, prefix) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  let html = '';
+  items.forEach(item => {
+    const checked = selected.length === 0 || selected.includes(item);
+    html += `<label><input type="checkbox" value="${item.replace(/"/g,'&quot;')}" ${checked?'checked':''} onchange="onCheckboxChange('${prefix}')">${item}</label>`;
   });
-  container.innerHTML = html;
+  html += `<div class="multi-dropdown-actions">
+    <button class="btn-all" onclick="selectAll('${prefix}')">全选</button>
+    <button class="btn-ok" onclick="closeDropdown('${prefix}Dropdown')">确定</button>
+  </div>`;
+  list.innerHTML = html;
 }
 
-function renderSubChanPills() {
-  const container = document.getElementById('subChanPills');
-  if (!container) return;
-  let html = `<button class="multi-pill${subChanFilters.length===0?' active':''}" onclick="toggleAllSub()">全部${subChanFilters.length===0?'':'<span class=count>'+allSubChannels.length+'</span>'}</button>`;
-  allSubChannels.forEach(s => {
-    const active = subChanFilters.includes(s);
-    html += `<button class="multi-pill${active?' active':''}" onclick="toggleSub('${s.replace(/'/g,"\\'")}')">${s.length>8?s.slice(0,8)+'…':s}${active?' ✓':''}</button>`;
-  });
-  container.innerHTML = html;
-}
-
-function toggleAllChan() {
-  chanFilters = [];
-  renderChanPills();
+function onCheckboxChange(prefix) {
+  const listId = prefix === 'chan' ? 'chanDropdownList' : 'subDropdownList';
+  const checks = document.querySelectorAll('#'+listId+' input[type=checkbox]');
+  const selected = [];
+  checks.forEach(cb => { if (cb.checked) selected.push(cb.value); });
+  if (prefix === 'chan') {
+    chanFilters = selected.length === allChannels.length ? [] : selected;
+  } else {
+    subChanFilters = selected.length === allSubChannels.length ? [] : selected;
+  }
+  updateDropdownLabels();
   renderAll();
 }
 
-function toggleChan(name) {
-  const idx = chanFilters.indexOf(name);
-  if (idx >= 0) chanFilters.splice(idx, 1);
-  else chanFilters.push(name);
-  if (chanFilters.length === allChannels.length) chanFilters = [];
-  renderChanPills();
+function selectAll(prefix) {
+  if (prefix === 'chan') { chanFilters = []; } else { subChanFilters = []; }
+  buildFilterPills();
+  updateDropdownLabels();
   renderAll();
 }
 
-function toggleAllSub() {
-  subChanFilters = [];
-  renderSubChanPills();
-  renderAll();
+function updateDropdownLabels() {
+  const cl = document.getElementById('chanDropdownLabel');
+  const sl = document.getElementById('subDropdownLabel');
+  const cb = document.querySelector('#chanDropdown .multi-dropdown-btn');
+  const sb = document.querySelector('#subDropdown .multi-dropdown-btn');
+  if (cl) cl.textContent = chanFilters.length === 0 ? '全部渠道' : chanFilters.length+' 个渠道';
+  if (sl) sl.textContent = subChanFilters.length === 0 ? '全部细分' : subChanFilters.length+' 个细分';
+  if (cb) cb.classList.toggle('has-selection', chanFilters.length > 0);
+  if (sb) sb.classList.toggle('has-selection', subChanFilters.length > 0);
 }
 
-function toggleSub(name) {
-  const idx = subChanFilters.indexOf(name);
-  if (idx >= 0) subChanFilters.splice(idx, 1);
-  else subChanFilters.push(name);
-  if (subChanFilters.length === allSubChannels.length) subChanFilters = [];
-  renderSubChanPills();
-  renderAll();
+function toggleDropdown(id) {
+  const panel = document.getElementById(id+'Panel');
+  if (!panel) return;
+  const isOpen = panel.classList.contains('show');
+  document.querySelectorAll('.multi-dropdown-panel').forEach(p => p.classList.remove('show'));
+  if (!isOpen) {
+    panel.classList.add('show');
+    if (id === 'chanDropdown') renderDropdown('chanDropdownList', allChannels, chanFilters, 'chan');
+    if (id === 'subDropdown') renderDropdown('subDropdownList', allSubChannels, subChanFilters, 'sub');
+  }
 }
 
-// onChannelChange removed - replaced by toggleChanFilter
+function closeDropdown(id) {
+  const panel = document.getElementById(id+'Panel');
+  if (panel) panel.classList.remove('show');
+}
 
-// onSubChannelChange removed - replaced by toggleSubFilter
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.multi-dropdown')) {
+    document.querySelectorAll('.multi-dropdown-panel').forEach(p => p.classList.remove('show'));
+  }
+});
 
 function setGranularity(gr, btn) {
   granularity = gr;
