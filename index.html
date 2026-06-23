@@ -358,7 +358,7 @@ th,td{padding:6px 8px;font-size:12px}
 <!-- Tables -->
 <div class="table-card">
 <div class="card-header"><div class="card-title">渠道明细</div><div class="card-subtitle" id="tableCount"></div></div>
-<div class="table-wrap"><table><thead><tr><th>#</th><th>渠道</th><th class="text-right">销售额</th><th class="text-right">占比</th><th class="text-right">日均</th><th>占比图</th></tr></thead><tbody id="chanTableBody"></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>渠道</th><th class="text-right">销售额</th><th class="text-right">占比</th><th class="text-right">日均</th><th>占比图</th><th>每日明细</th></tr></thead><tbody id="chanTableBody"></tbody></table></div>
 </div>
 <div class="table-card">
 <div class="card-header"><div class="card-title">细分渠道明细</div><div class="card-subtitle" id="subTableCount"></div></div>
@@ -526,11 +526,17 @@ function aggByDate(data, gran) {
 function aggByChannel(data) {
   const map = {};
   data.forEach(d => {
-    if(!map[d['渠道']]) map[d['渠道']] = {channel:d['渠道'],sales:0,count:0};
+    if(!map[d['渠道']]) map[d['渠道']] = {channel:d['渠道'],sales:0,count:0,daily:{}};
     map[d['渠道']].sales += d['销售额'];
     map[d['渠道']].count++;
+    const date = d['日期'];
+    map[d['渠道']].daily[date] = (map[d['渠道']].daily[date]||0) + d['销售额'];
   });
-  return Object.values(map).sort((a,b) => b.sales - a.sales);
+  return Object.values(map).map(c => {
+    c.dailyData = Object.entries(c.daily).map(([date,sales]) => ({date,sales})).sort((a,b) => a.date.localeCompare(b.date));
+    delete c.daily;
+    return c;
+  }).sort((a,b) => b.sales - a.sales);
 }
 
 function aggBySub(data) {
@@ -936,14 +942,23 @@ function renderAll() {
   // Channel table
   const maxChan = chanAgg[0]?.sales||1;
   const chanCls = ['c0','c1','c2','c3','c4'];
+  const chanId = (ch) => 'chan-' + ch.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g,'_');
   document.getElementById('chanTableBody').innerHTML = chanAgg.map((c,i)=>`
     <tr><td><span class="rank-badge ${i<3?'top'+(i+1):''}">${i+1}</span></td>
     <td><span class="channel-tag ${chanCls[i%5]}">${c.channel}</span></td>
     <td class="text-right sales-num">${fmtMoney(c.sales)}</td>
     <td class="text-right">${((c.sales/totalSales)*100).toFixed(1)}%</td>
-    
     <td class="text-right">${fmtMoney(c.sales/dayCount)}</td>
-    <td><div class="progress-bar"><div class="progress-fill" style="width:${((c.sales/maxChan)*100).toFixed(0)}%"></div></div></td></tr>
+    <td><div class="progress-bar"><div class="progress-fill" style="width:${((c.sales/maxChan)*100).toFixed(0)}%"></div></div></td>
+    <td>${c.dailyData && c.dailyData.length > 1 ? `<button class="daily-toggle" onclick="toggleDailyDetail(this,'${chanId(c.channel)}','${c.channel}',${JSON.stringify(c.dailyData).replace(/"/g,'&quot;')})" title="展开每日明细">▶</button>` : '<span style="color:var(--text3);font-size:11px">单日</span>'}</td></tr>
+    <tr class="daily-detail-row" id="${chanId(c.channel)}" style="display:none">
+      <td colspan="7">
+        <div style="padding:12px 20px;background:#fafafa;border-radius:8px">
+          <div style="font-weight:600;margin-bottom:8px">${c.channel} · 每日销售趋势</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="chart-${chanId(c.channel)}"></canvas></div>
+        </div>
+      </td>
+    </tr>
   `).join('');
   document.getElementById('tableCount').textContent = chanAgg.length+' 个渠道 · '+dayCount+' 天';
 
