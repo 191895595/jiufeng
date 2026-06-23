@@ -171,6 +171,16 @@ def fetch_all():
     total_sales = sum(r["销售额"] for r in records)
     dates = sorted(set(r["日期"] for r in records))
 
+    # 输出每月汇总（方便对比透视表）
+    monthly = {}
+    for r in records:
+        m = r["日期"][:7]
+        monthly[m] = monthly.get(m, 0) + r["销售额"]
+    print("📋 每月汇总:")
+    for m in sorted(monthly.keys()):
+        print(f"  {m}: ¥{monthly[m]:,.2f}")
+    print(f"  💰 总计: ¥{total_sales:,.2f}")
+
     return {
         "records": records,
         "total_sales": round(total_sales, 2),
