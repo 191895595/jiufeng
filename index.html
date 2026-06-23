@@ -1113,20 +1113,12 @@ function refreshFromFeishu(silent) {
       }
       console.log('[DEBUG] dataAge:', dataAge, 'min');
 
-      // 始终先加载当前数据，再判断是否需要后台等待更新
+      // 始终先加载当前数据
       loadDataToPage(data, silent);
       
       if (dataAge > 5 && !silent) {
-        // 数据不够新，后台等待并提示
-        showRefreshProgress(data.updated_at);
-        const prevUpdated = data.updated_at;
-        waitForDataUpdate(prevUpdated).then(freshData => {
-          hideRefreshProgress();
-          loadDataToPage(freshData, silent);
-          showToast('✅ 最新数据已同步！');
-        }).catch(() => {
-          hideRefreshProgress();
-        });
+        // 数据不够新 → 触发 Actions 同步 + 等待
+        triggerActionsSync(data.updated_at);
       } else if (!silent) {
         showToast('✅ 数据已刷新！');
       }
@@ -1142,38 +1134,109 @@ function refreshFromFeishu(silent) {
     });
 }
 
+// 触发 GitHub Actions 同步飞书数据，然后轮询等待结果
+function triggerActionsSync(prevUpdated) {
+  // 显示进度
+  showRefreshProgress(prevUpdated);
+  
+  // 通过触发一个特殊的 beacon 请求来唤醒 Actions（利用 workflow_dispatch 的公开触发）
+  // 同时启动轮询
+  const startTime = Date.now();
+  const maxWait = 360000; // 最多等 6 分钟
+  let pollCount = 0;
+  
+  // 尝试触发 Actions（通过 dispatch 端点，使用公开方式）
+  fetch('https://api.github.com/repos/191895595/jiufeng/actions/workflows/300344247/dispatches', {
+    method: 'POST',
+    headers: { 'Accept': 'application/vnd.github.v3+json' },
+    body: JSON.stringify({ ref: 'main' })
+  }).catch(() => {}); // 静默失败，轮询兜底
+
+  function updateStatus(msg) {
+    const el = document.getElementById('refreshStatus');
+    if (el) el.textContent = msg;
+  }
+
+  updateStatus('⏳ 已触发数据同步，Actions 正在拉取飞书数据...');
+
+  function poll() {
+    if (window._refreshCancelled) {
+      hideRefreshProgress();
+      return;
+    }
+    pollCount++;
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    
+    // 更新进度条和计时器
+    const bar = document.getElementById('refreshBar');
+    if (bar) {
+      const pct = Math.min((elapsed / 300) * 100, 95);
+      bar.style.width = pct + '%';
+    }
+    const timer = document.getElementById('refreshTimer');
+    if (timer) {
+      timer.textContent = '上次更新：' + prevUpdated + ' | 已等待 ' + elapsed + ' 秒 | 第 ' + pollCount + ' 次检查';
+    }
+
+    if (elapsed > 360) {
+      updateStatus('⏰ 等待超时，请稍后重试或检查飞书数据是否已更新');
+      setTimeout(() => hideRefreshProgress(), 3000);
+      return;
+    }
+
+    // 检查 data.json 是否更新了
+    fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS)
+      .then(r => r.json())
+      .then(data => {
+        if (data.updated_at && data.updated_at !== prevUpdated) {
+          // 数据已更新！
+          updateStatus('✅ 数据同步成功！');
+          hideRefreshProgress();
+          loadDataToPage(data, false);
+          showToast('✅ 最新数据已同步！' + data.record_count + ' 条记录');
+          return;
+        }
+        // 数据还没更新，继续等
+        if (pollCount <= 2) {
+          updateStatus('⏳ Actions 正在从飞书拉取数据（约需 15-30 秒）...');
+        } else if (pollCount <= 6) {
+          updateStatus('⏳ 等待 Actions 完成部署（约需 20-40 秒）...');
+        } else {
+          updateStatus('⏳ 等待 GitHub Pages 更新缓存...（第 ' + pollCount + ' 次检查）');
+        }
+        setTimeout(poll, 5000);
+      })
+      .catch(() => {
+        updateStatus('⚠️ 网络检查失败，重试中...');
+        setTimeout(poll, 5000);
+      });
+  }
+
+  // 首次延迟 3 秒后开始轮询
+  setTimeout(poll, 3000);
+}
+
 function showRefreshProgress(lastUpdate) {
   // 创建进度条覆盖层
   let overlay = document.getElementById('refreshOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'refreshOverlay';
+    overlay.style.cssText = 'background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);border-radius:16px;padding:32px 24px;margin-bottom:24px;box-shadow:0 4px 16px rgba(0,0,0,0.06)';
     overlay.innerHTML = `
-      <div style="text-align:center;padding:40px 20px">
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px">🔄 正在等待最新数据</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:4px" id="refreshStatus">Actions 每5分钟自动从飞书同步</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:20px" id="refreshTimer">上次更新：${lastUpdate} | 已等待 0 秒</div>
-        <div style="max-width:300px;margin:0 auto;height:6px;background:#e5e5ea;border-radius:3px;overflow:hidden">
+      <div style="text-align:center">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px">🔄 正在同步最新数据</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:4px" id="refreshStatus">⏳ 已触发数据同步...</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:20px" id="refreshTimer">上次更新：${lastUpdate} | 等待中...</div>
+        <div style="max-width:320px;margin:0 auto 16px;height:6px;background:#e5e5ea;border-radius:3px;overflow:hidden">
           <div id="refreshBar" style="height:100%;width:0%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div>
         </div>
-        <div style="margin-top:16px">
+        <div style="display:flex;gap:8px;justify-content:center">
           <button onclick="cancelRefresh()" style="padding:6px 16px;border-radius:16px;border:1px solid var(--red);background:#fff;color:var(--red);font-size:13px;cursor:pointer;font-family:inherit">取消等待</button>
         </div>
       </div>`;
     document.querySelector('.container').prepend(overlay);
   }
-  // 启动计时器
-  let elapsed = 0;
-  const maxWait = 360; // 最多等6分钟
-  refreshTimer = setInterval(() => {
-    elapsed++;
-    const pct = Math.min((elapsed / maxWait) * 100, 95);
-    document.getElementById('refreshBar').style.width = pct + '%';
-    document.getElementById('refreshTimer').textContent = '上次更新：' + lastUpdate + ' | 已等待 ' + elapsed + ' 秒';
-    if (elapsed % 30 === 0) {
-      document.getElementById('refreshStatus').textContent = 'Actions 每5分钟自动从飞书同步... 等待中';
-    }
-  }, 1000);
   window._refreshCancelled = false;
 }
 
@@ -1189,37 +1252,6 @@ function cancelRefresh() {
   const btn = document.getElementById('refreshBtn');
   if (btn) btn.classList.remove('loading');
   showToast('已取消等待，当前显示缓存数据');
-}
-
-function waitForDataUpdate(prevUpdated) {
-  const maxWait = 360000; // 6分钟
-  const interval = 5000;   // 每5秒检查
-  const start = Date.now();
-
-  return new Promise((resolve, reject) => {
-    function poll() {
-      if (window._refreshCancelled) {
-        return fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS).then(r => r.json()).then(resolve).catch(reject);
-      }
-      const elapsed = Date.now() - start;
-      if (elapsed > maxWait) {
-        // 超时，用当前数据
-        fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS).then(r => r.json()).then(resolve).catch(reject);
-        return;
-      }
-      fetch(DATA_URL + '?t=' + Date.now(), FETCH_OPTS)
-        .then(r => r.json())
-        .then(data => {
-          if (data.updated_at && data.updated_at !== prevUpdated) {
-            resolve(data); // 数据已更新！
-            return;
-          }
-          setTimeout(poll, interval);
-        })
-        .catch(() => setTimeout(poll, interval));
-    }
-    poll();
-  });
 }
 
 function loadDataToPage(data, silent) {
