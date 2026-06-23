@@ -49,6 +49,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .login-submit:hover{background:#0077ed}
 .login-cancel{flex:1;padding:10px;background:#f5f5f7;color:var(--text2);border:none;border-radius:12px;font-size:15px;cursor:pointer;font-family:inherit;transition:var(--t)}
 .login-cancel:hover{background:#e5e5ea}
+.multi-pill-group{display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px 0}
+.multi-pill-group::-webkit-scrollbar{display:none}
+.multi-pill{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;transition:var(--t);white-space:nowrap;font-family:inherit;flex-shrink:0}
+.multi-pill:hover{border-color:var(--accent);color:var(--accent)}
+.multi-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.multi-pill .count{font-size:10px;opacity:.7}
 
 
 
@@ -282,14 +288,12 @@ th,td{padding:6px 8px;font-size:12px}
 <!-- Channel filter -->
 <div class="channel-filter-row">
 <span class="filter-label">渠道</span>
-<select class="date-input" id="chanSelect" onchange="onChannelChange()">
-<option value="all">全部渠道</option>
-<option value="线下回款">线下回款</option><option value="经销商">经销商</option><option value="而立私域回款">而立私域回款</option><option value="而立私域销售">而立私域销售</option><option value="自营">自营</option>
-</select>
-<select class="date-input" id="subChanSelect" onchange="onSubChannelChange()">
-<option value="all">全部细分渠道</option>
-</select>
-<button class="filter-pill" onclick="clearAllFilters()" style="background:#f5f5f7;color:#ff3b30;border:1px solid #ff3b30;">清空筛选</button>
+<div class="multi-pill-group" id="chanPills"></div>
+</div>
+<div class="channel-filter-row">
+<span class="filter-label">细分</span>
+<div class="multi-pill-group" id="subChanPills"></div>
+<button class="filter-pill" onclick="clearAllFilters()" style="background:#f5f5f7;color:#ff3b30;border:1px solid #ff3b30;flex-shrink:0">清空</button>
 <span style="font-size:12px;color:var(--text3);margin-left:8px" id="filterSummary"></span>
 </div>
 
@@ -347,9 +351,8 @@ th,td{padding:6px 8px;font-size:12px}
 <option value="month">月对比</option>
 <option value="custom">自定义范围</option>
 </select>
-<select class="compare-select" id="cmpChan" onchange="renderCompare()">
+<select class="compare-select" id="cmpChan" onchange="onCmpChanChange()">
 <option value="all">全部渠道</option>
-<option value="线下回款">线下回款</option><option value="经销商">经销商</option><option value="而立私域回款">而立私域回款</option><option value="而立私域销售">而立私域销售</option><option value="自营">自营</option>
 </select>
 <select class="compare-select" id="cmpSubChan" onchange="renderCompare()">
 <option value="all">全部细分渠道</option>
@@ -377,8 +380,8 @@ let allData = RAW_DATA;
 function getDataMaxDate(){if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']>a?b['日期']:a,allData[0]['日期']);}
 function getDataMinDate(){if(!allData.length)return null;return allData.reduce((a,b)=>b['日期']<a?b['日期']:a,allData[0]['日期']);}
 let timeFilter = 'all';
-let chanFilter = 'all';
-let subChanFilter = 'all';
+let chanFilters = [];  // 空数组 = 全选
+let subChanFilters = [];
 let granularity = 'day';
 
 function fmtMoney(v) {
@@ -460,10 +463,10 @@ function getFilteredData() {
   if (timeFilter !== 'all') {
     const r = getDateRange(timeFilter);
     if (r) data = data.filter(d => d['日期'] >= r.from && d['日期'] <= r.to);
-    else if (timeFilter && timeFilter.startsWith('custom_')) data = []; // 用户选了自定义但还没填入时显示空
+    else if (timeFilter && timeFilter.startsWith('custom_')) data = [];
   }
-  if (chanFilter !== 'all') data = data.filter(d => d['渠道'] === chanFilter);
-  if (subChanFilter !== 'all') data = data.filter(d => d['细分渠道'] === subChanFilter);
+  if (chanFilters.length > 0) data = data.filter(d => chanFilters.includes(d['渠道']));
+  if (subChanFilters.length > 0) data = data.filter(d => subChanFilters.includes(d['细分渠道']));
   return data;
 }
 
@@ -529,6 +532,8 @@ let trendChart, channelPieChart, channelBarChart, subChannelBarChart, cmpChartA,
 function destroyCharts() {
   [trendChart,channelPieChart,channelBarChart,subChannelBarChart,cmpChartA,cmpChartB].forEach(c=>{if(c)c.destroy()});
   trendChart=channelPieChart=channelBarChart=subChannelBarChart=cmpChartA=cmpChartB=null;
+  Object.values(dailyCharts).forEach(c => c.destroy());
+  for (const k in dailyCharts) delete dailyCharts[k];
 }
 
 function formatTrendLabel(l) {
@@ -565,15 +570,17 @@ function renderAll() {
     <div class="kpi-card"><div class="kpi-label">活跃细分渠道</div><div class="kpi-value">${subAgg.length}</div><div class="kpi-sub">覆盖 ${chanAgg.length} 个主渠道</div></div>
   `;
 
+  const filterLabel = chanFilters.length>0 ? chanFilters.length+'个渠道' : '全部渠道';
+  const subLabel = subChanFilters.length>0 ? subChanFilters.length+'个细分' : '';
   document.getElementById('filterSummary').textContent =
-    (chanFilter!=='all' || subChanFilter!=='all') ?
-    `当前筛选：${chanFilter==='all'?'全部渠道':chanFilter}${subChanFilter!=='all'?' → '+subChanFilter:''} · ${data.length}条 / ${dayCount}天` : '';
+    (chanFilters.length>0 || subChanFilters.length>0) ?
+    `当前筛选：${filterLabel}${subLabel?' + '+subLabel:''} · ${data.length}条 / ${dayCount}天` : '';
 
   // Trend combo chart (bar + line + 环比)
   const trendData = aggByDate(data, granularity);
   // Build prev-period lookup for 环比
   const prevMap = {};
-  const chanFilteredData = (chanFilter==='all' && subChanFilter==='all') ? allData : allData.filter(d => { if (chanFilter!=='all' && d['渠道']!==chanFilter) return false; if (subChanFilter!=='all' && d['细分渠道']!==subChanFilter) return false; return true; });
+  const chanFilteredData = (chanFilters.length===0 && subChanFilters.length===0) ? allData : allData.filter(d => { if (chanFilters.length>0 && !chanFilters.includes(d['渠道'])) return false; if (subChanFilters.length>0 && !subChanFilters.includes(d['细分渠道'])) return false; return true; });
   const allTrend = aggByDate(chanFilteredData, granularity);
   allTrend.forEach((d,i,arr) => { if(i>0) prevMap[d.label] = arr[i-1].sales; });
   // For daily, also try comparing to same day last week if prev day missing
@@ -666,7 +673,7 @@ function renderAll() {
   // Pie — switches to sub-channel breakdown when a channel is selected
   const pieCtx = document.getElementById('channelPie').getContext('2d');
   if (channelPieChart) channelPieChart.destroy();
-  const showSubPie = chanFilter !== 'all';
+  const showSubPie = chanFilters.length > 0;
   const pieData = showSubPie ? aggBySub(data).slice(0,8) : chanAgg;
   const pieLabelKey = showSubPie ? 'sub' : 'channel';
   const pieTotal = pieData.reduce((s,c)=>s+c.sales,0);
@@ -688,7 +695,7 @@ function renderAll() {
   // Channel/Sub-channel Bar — shows 环比 growth TOP15 when channel selected
   const barCtx = document.getElementById('channelBar').getContext('2d');
   if (channelBarChart) channelBarChart.destroy();
-  const showSubBars = chanFilter !== 'all';
+  const showSubBars = chanFilters.length > 0;
   const barTitleEl = document.getElementById('channelBar').closest('.card').querySelector('.card-title');
   const barSubEl = document.getElementById('channelBar').closest('.card').querySelector('.card-subtitle');
   
@@ -716,7 +723,7 @@ function renderAll() {
     }
     let prevData = [];
     if (prevRange) {
-      prevData = allData.filter(d => d['渠道']===chanFilter && d['日期']>=prevRange.from && d['日期']<=prevRange.to);
+      prevData = allData.filter(d => (chanFilters.length===0||chanFilters.includes(d['渠道'])) && (subChanFilters.length===0||subChanFilters.includes(d['细分渠道'])) && d['日期']>=prevRange.from && d['日期']<=prevRange.to);
     }
     const prevSubSales = aggBySub(prevData);
     const prevMap = {};
@@ -730,7 +737,7 @@ function renderAll() {
     }).filter(s => s.prevSales > 0 || s.sales > 0).sort((a,b) => b.growth - a.growth).slice(0, 15);
     
     if (barTitleEl) barTitleEl.textContent = '细分渠道环比增长 TOP15';
-    if (barSubEl) barSubEl.textContent = chanFilter + ' · 环比'+(timeFilter==='all'?'月':'期')+'对比';
+    if (barSubEl) barSubEl.textContent = (chanFilters.length>0 ? chanFilters.join('+') : '全部渠道') + ' · 环比'+(timeFilter==='all'?'月':'期')+'对比';
     
     channelBarChart = new Chart(barCtx, {
       type: 'bar',
@@ -856,15 +863,12 @@ function renderAll() {
       <td class="text-right">${((c.sales/totalSales)*100).toFixed(1)}%</td>
       <td class="text-right">${fmtMoney(c.sales/dayCount)}</td>
       <td><div class="progress-bar"><div class="progress-fill" style="width:${((c.sales/maxSub)*100).toFixed(0)}%"></div></div></td>
-      <td>${dayCount > 1 ? `<button class="daily-toggle" onclick="toggleDailyDetail(this,'${subId(c.sub)}')" title="展开每日明细">▶</button>` : '<span style="color:var(--text3);font-size:11px">单日</span>'}</td>
+      <td>${dayCount > 1 ? `<button class="daily-toggle" onclick="toggleDailyDetail(this,'${subId(c.sub)}','${c.sub.replace(/'/g,"\\'")}',${JSON.stringify(c.dailyData).replace(/"/g,'&quot;')})" title="展开每日明细">▶</button>` : '<span style="color:var(--text3);font-size:11px">单日</span>'}</td>
     </tr>
     <tr class="daily-detail-row" id="${subId(c.sub)}" style="display:none">
       <td colspan="7">
         <div class="daily-mini-wrap">
-          <table class="daily-mini-table">
-            <thead><tr><th>日期</th><th class="text-right">销售额</th></tr></thead>
-            <tbody>${c.dailyData.map(d=>`<tr><td>${d.date.slice(5)}</td><td class="text-right sales-num">${fmtMoney(d.sales)}</td></tr>`).join('')}</tbody>
-          </table>
+          <canvas id="chart-${subId(c.sub)}" style="width:100%;height:180px"></canvas>
         </div>
       </td>
     </tr>
@@ -875,8 +879,9 @@ function renderAll() {
   renderCompare();
 }
 
-// ===== DAILY DETAIL TOGGLE =====
-function toggleDailyDetail(btn, id) {
+// ===== DAILY DETAIL TOGGLE (Chart) =====
+const dailyCharts = {};
+function toggleDailyDetail(btn, id, name, dailyDataJson) {
   const row = document.getElementById(id);
   if (!row) return;
   const isOpen = row.classList.contains('show');
@@ -884,10 +889,50 @@ function toggleDailyDetail(btn, id) {
     row.classList.remove('show');
     btn.textContent = '▶';
     btn.classList.remove('open');
+    if (dailyCharts[id]) { dailyCharts[id].destroy(); delete dailyCharts[id]; }
   } else {
     row.classList.add('show');
     btn.textContent = '▼';
     btn.classList.add('open');
+    // Parse daily data from JSON (passed via onclick)
+    let dailyData = dailyDataJson;
+    if (typeof dailyData === 'string') dailyData = JSON.parse(dailyData.replace(/&quot;/g,'"'));
+    // Render chart
+    const canvas = document.getElementById('chart-'+id);
+    if (!canvas || dailyData.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    dailyCharts[id] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: dailyData.map(d => d.date.slice(5)),
+        datasets: [{
+          label: name,
+          data: dailyData.map(d => d.sales),
+          borderColor: '#0071e3',
+          backgroundColor: 'rgba(0,113,227,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1d1d1f',
+            callbacks: { label: ctx => '¥' + ctx.parsed.y.toLocaleString() }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#aeaeb2', maxTicksLimit: 8 } },
+          y: { grid: { color: '#f0f0f2' }, ticks: { font: { size: 10 }, color: '#aeaeb2', callback: v => (v/10000).toFixed(1)+'万' } }
+        }
+      }
+    });
   }
 }
 
@@ -1087,16 +1132,11 @@ function loadDataToPage(data, silent) {
 
   allData = data.records;
 
-  // Rebuild dropdowns from fresh data
-  const uchan = [...new Set(allData.map(d => d['渠道']))].sort();
-  const usub = [...new Set(allData.map(d => d['细分渠道']))].sort();
-  document.getElementById('chanSelect').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
-  document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
-  document.getElementById('cmpChan').innerHTML = '<option value="all">全部渠道</option>' + uchan.map(c => '<option value="'+c+'">'+c+'</option>').join('');
-  document.getElementById('cmpSubChan').innerHTML = '<option value="all">全部细分渠道</option>';
+  // Rebuild filter pills from fresh data
+  buildFilterPills();
 
   // Reset filters
-  timeFilter='all'; chanFilter='all'; subChanFilter='all';
+  timeFilter='all'; chanFilters=[]; subChanFilters=[];
   document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
   const allPill = document.querySelector('[data-filter="all"]');
   if (allPill) allPill.classList.add('active');
@@ -1187,46 +1227,86 @@ function getISOWeek(d){
 }
 
 function clearAllFilters() {
-  timeFilter = 'all'; chanFilter = 'all'; subChanFilter = 'all'; granularity = 'day';
+  timeFilter = 'all'; chanFilters = []; subChanFilters = []; granularity = 'day';
   document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
-  document.querySelector('.filter-bar .filter-pill[data-filter="all"]').classList.add('active');
-  // Hide all custom panels and reset values
+  const ap = document.querySelector('.filter-bar .filter-pill[data-filter="all"]');
+  if (ap) ap.classList.add('active');
   ['customRange','customDay','customWeek','customMonth'].forEach(id=>document.getElementById(id).classList.remove('show'));
   ['crFrom','crTo','crDay','crWeek','crMonth'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
-  document.getElementById('chanSelect').value = 'all';
-  const subSel = document.getElementById('subChanSelect');
-  subSel.innerHTML = '<option value="all">全部细分渠道</option>';
-  ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
-  subSel.value = 'all';
-  document.getElementById('trendDay').classList.add('active');
-  document.getElementById('trendMonth').classList.remove('active');
-  document.getElementById('cmpDay').classList.add('active');
-  document.getElementById('cmpMonth').classList.remove('active');
-  document.getElementById('cmpWeek').classList.remove('active');
-  cmpType = 'day';
-  cmpA = ''; cmpB = ''; cmpChan = 'all'; cmpSub = 'all';
+  renderChanPills();
+  renderSubChanPills();
   renderAll();
 }
 
-function onChannelChange() {
-  chanFilter = document.getElementById('chanSelect').value;
-  const subSel = document.getElementById('subChanSelect');
-  subSel.innerHTML = '<option value="all">全部细分渠道</option>';
-  if (chanFilter !== 'all') {
-    const subs = [...new Set(allData.filter(d=>d['渠道']===chanFilter).map(d=>d['细分渠道']))].sort();
-    subs.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
-  } else {
-    ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
-  }
-    subChanFilter = 'all';
-  subSel.value = 'all';
+// ===== MULTI-FILTER PILLS =====
+let allChannels = [];
+let allSubChannels = [];
+
+function buildFilterPills() {
+  allChannels = [...new Set(allData.map(d => d['渠道']))].sort();
+  allSubChannels = [...new Set(allData.map(d => d['细分渠道']))].sort();
+  renderChanPills();
+  renderSubChanPills();
+  // Also update comparison selects
+  const cmpChan = document.getElementById('cmpChan');
+  if (cmpChan) cmpChan.innerHTML = '<option value="all">全部渠道</option>' + allChannels.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+}
+
+function renderChanPills() {
+  const container = document.getElementById('chanPills');
+  if (!container) return;
+  let html = `<button class="multi-pill${chanFilters.length===0?' active':''}" onclick="toggleAllChan()">全部${chanFilters.length===0?'':'<span class=count>'+allChannels.length+'</span>'}</button>`;
+  allChannels.forEach(c => {
+    const active = chanFilters.includes(c);
+    html += `<button class="multi-pill${active?' active':''}" onclick="toggleChan('${c.replace(/'/g,"\\'")}')">${c}${active?' ✓':''}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function renderSubChanPills() {
+  const container = document.getElementById('subChanPills');
+  if (!container) return;
+  let html = `<button class="multi-pill${subChanFilters.length===0?' active':''}" onclick="toggleAllSub()">全部${subChanFilters.length===0?'':'<span class=count>'+allSubChannels.length+'</span>'}</button>`;
+  allSubChannels.forEach(s => {
+    const active = subChanFilters.includes(s);
+    html += `<button class="multi-pill${active?' active':''}" onclick="toggleSub('${s.replace(/'/g,"\\'")}')">${s.length>8?s.slice(0,8)+'…':s}${active?' ✓':''}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function toggleAllChan() {
+  chanFilters = [];
+  renderChanPills();
   renderAll();
 }
 
-function onSubChannelChange() {
-  subChanFilter = document.getElementById('subChanSelect').value;
+function toggleChan(name) {
+  const idx = chanFilters.indexOf(name);
+  if (idx >= 0) chanFilters.splice(idx, 1);
+  else chanFilters.push(name);
+  if (chanFilters.length === allChannels.length) chanFilters = [];
+  renderChanPills();
   renderAll();
 }
+
+function toggleAllSub() {
+  subChanFilters = [];
+  renderSubChanPills();
+  renderAll();
+}
+
+function toggleSub(name) {
+  const idx = subChanFilters.indexOf(name);
+  if (idx >= 0) subChanFilters.splice(idx, 1);
+  else subChanFilters.push(name);
+  if (subChanFilters.length === allSubChannels.length) subChanFilters = [];
+  renderSubChanPills();
+  renderAll();
+}
+
+// onChannelChange removed - replaced by toggleChanFilter
+
+// onSubChannelChange removed - replaced by toggleSubFilter
 
 function setGranularity(gr, btn) {
   granularity = gr;
@@ -1306,9 +1386,9 @@ function onCmpChanChange() {
       subSel.innerHTML += '<option value="'+s+'">'+s+'</option>';
     });
   } else {
-    ALL_SUBS.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+    allSubChannels.forEach(s => { subSel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
   }
-    renderCompare();
+  renderCompare();
 }
 
 function renderCompare() {
@@ -1518,20 +1598,14 @@ function handleFileUpload(input) {
       document.getElementById('lastUpdate').textContent = '📂 手动更新 | 数据截至 '+udates[udates.length-1]+' | 共 '+allData.length+' 条';
       document.getElementById('downloadBtn').disabled = false;
 
-      // Rebuild channel dropdowns
-      const uchan = [...new Set(allData.map(d=>d['渠道']))].sort();
-      const usub = [...new Set(allData.map(d=>d['细分渠道']))].sort();
-      let chOpts = '<option value="all">全部渠道</option>';
-      uchan.forEach(c=>{chOpts+='<option value="'+c+'">'+c+'</option>';});
-      document.getElementById('chanSelect').innerHTML = chOpts;
-      let subOpts = '<option value="all">全部细分渠道</option>';
-      usub.forEach(s=>{subOpts+='<option value="'+s+'">'+s+'</option>';});
-      document.getElementById('subChanSelect').innerHTML = subOpts;
+      // Rebuild filter pills
+      buildFilterPills();
 
       // Reset filters
-      timeFilter='all'; chanFilter='all'; subChanFilter='all';
+      timeFilter='all'; chanFilters=[]; subChanFilters=[];
       document.querySelectorAll('.filter-bar .filter-pill').forEach(p=>p.classList.remove('active'));
-      document.querySelector('[data-filter="all"]').classList.add('active');
+      const allPill2 = document.querySelector('[data-filter="all"]');
+      if (allPill2) allPill2.classList.add('active');
       document.getElementById('chanSelect').value='all';
       document.getElementById('subChanSelect').value='all';
 
@@ -1644,16 +1718,8 @@ async function autoLoadExcel() {
       return {'日期':d.slice(0,10),'渠道':String(row[chanKey]||'').trim(),'细分渠道':String(row[subKey]||'').trim().replace(/\n/g,'').replace(/\r/g,''),'销售额':parseFloat(row[salesKey])||0};
     }).filter(d=>d['销售额']>0&&/^\d{4}-\d{2}-\d{2}$/.test(d['日期']));
 
-    // Update ALL_SUBS and channel dropdowns dynamically
-    const uchan = [...new Set(parsed.map(d=>d['渠道']))].sort();
-    const usub = [...new Set(parsed.map(d=>d['细分渠道']))].sort();
-    let chOpts = '<option value="all">全部渠道</option>';
-    uchan.forEach(c=>{chOpts+='<option value="'+c+'">'+c+'</option>';});
-    document.getElementById('chanSelect').innerHTML = chOpts;
-    document.getElementById('subChanSelect').innerHTML = '<option value="all">全部细分渠道</option>';
-    let cmpChOpts = '<option value="all">全部渠道</option>';
-    uchan.forEach(c=>{cmpChOpts+='<option value="'+c+'">'+c+'</option>';});
-    document.getElementById('cmpChan').innerHTML = cmpChOpts;
+    // Build filter pills from parsed data
+    buildFilterPills();
 
     allData = parsed;
     document.getElementById('downloadBtn').disabled = false;
